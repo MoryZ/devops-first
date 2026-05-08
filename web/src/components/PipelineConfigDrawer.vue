@@ -207,6 +207,8 @@
 import { computed, ref, watch, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue'
+import { listGlobalVars } from '../api/globalVars'
+import { upsertPipelineConfig } from '../api/pipelines'
 
 const props = defineProps({
   open: Boolean,
@@ -359,12 +361,8 @@ const loadGlobalVariables = async () => {
   if (!props.token) return
   try {
     loadingGlobalVariables.value = true
-    const res = await fetch('/api/global-vars', {
-      headers: { Authorization: `Bearer ${props.token}` },
-    })
-    if (!res.ok) return
-    const data = await res.json()
-    globalVariables.value = data.data || []
+    const data = await listGlobalVars(props.token)
+    globalVariables.value = data.data || data.items || []
     
     // Build fieldMap: namespace -> [field1, field2, ...]
     const fieldMap = {}
@@ -404,13 +402,7 @@ const handleSave = async () => {
   }
 
   try {
-    const res = await fetch('/api/pipelines/config', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${props.token}`,
-      },
-      body: JSON.stringify({
+    await upsertPipelineConfig(props.token, {
         pipeline_id: props.pipelineId,
         name: props.pipelineName,
         release_unit_id: form.value.releaseUnitId,
@@ -436,13 +428,7 @@ const handleSave = async () => {
         git_token_field: form.value.gitTokenField,
         main_stages: [],
         env_stages: [],
-      }),
     })
-    if (!res.ok) {
-      const err = await res.json()
-      message.error(err.error || '保存失败')
-      return
-    }
     message.success('流程配置已保存')
     emit('save')
   } catch (err) {

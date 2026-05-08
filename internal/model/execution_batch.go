@@ -16,7 +16,9 @@ type ExecutionBatch struct {
 	BatchNumber   int       `gorm:"not null" json:"batch_number"`
 	Status        string    `gorm:"size:32;not null;index:idx_status" json:"status"` // pending, running, success, failed, cancelled
 	TriggeredBy   string    `gorm:"size:32;not null" json:"triggered_by"`            // manual, webhook, schedule
-	WorkDir       string    `gorm:"size:1024" json:"work_dir"`                       // /tmp/devops-exec/{systemId}/{pipelineId}/{batchId}
+	CommitID         string `gorm:"size:128" json:"commit_id"`                       // git commit hash recorded at execution time
+	StagesStatusJSON string `gorm:"type:text" json:"stages_status_json"`              // JSON map[stageName]status: pending/running/success/failed
+	WorkDir          string `gorm:"size:1024" json:"work_dir"`                       // /tmp/devops-exec/{systemId}/{pipelineId}/{batchId}
 	StartedAt     *time.Time `json:"started_at"`
 	CompletedAt   *time.Time `json:"completed_at"`
 	TotalDuration int64      `gorm:"default:0" json:"total_duration"` // milliseconds

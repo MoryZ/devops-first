@@ -64,6 +64,8 @@
     <a-modal
       v-model:open="createModalOpen"
       :title="isEditing ? '编辑发布单元' : '新增发布单元'"
+      cancel-text="取消"
+      ok-text="确认"
       :confirm-loading="creating"
       @ok="handleSaveUnit"
     >
@@ -80,20 +82,20 @@
         <a-form-item label="默认分支">
           <a-input v-model:value="newUnit.branch" placeholder="main / release-xxx" />
         </a-form-item>
-        <a-form-item label="触发源类型(repositoryType)">
+        <a-form-item label="触发源类型">
           <a-select v-model:value="newUnit.repositoryType" placeholder="选择触发源类型">
             <a-select-option value="git">git</a-select-option>
             <a-select-option value="svn">svn</a-select-option>
             <a-select-option value="artifact">artifact</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="展示顺序(displayOrder)">
+        <a-form-item label="展示顺序">
           <a-input-number v-model:value="newUnit.displayOrder" :min="1" style="width: 100%" />
         </a-form-item>
-        <a-form-item label="自动代码归并(autoMerge)">
+        <a-form-item label="自动代码归并">
           <a-switch v-model:checked="newUnit.autoMerge" checked-children="ON" un-checked-children="OFF" />
         </a-form-item>
-        <a-form-item label="自动打Tag(autoTag)">
+        <a-form-item label="自动打Tag">
           <a-switch v-model:checked="newUnit.autoTag" checked-children="ON" un-checked-children="OFF" />
         </a-form-item>
       </a-form>

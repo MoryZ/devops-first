@@ -156,6 +156,46 @@ func (s *PipelineConfigService) Upsert(userID uint, req PipelineConfigRequest) e
 	return nil
 }
 
+func (s *PipelineConfigService) UpsertReleaseUnitBinding(userID uint, pipelineID, releaseUnitID string) error {
+	if pipelineID == "" {
+		return fmt.Errorf("pipeline_id is required")
+	}
+
+	db := database.GetDB()
+	var existing model.PipelineConfig
+	err := db.Where("user_id = ? AND pipeline_id = ?", userID, pipelineID).First(&existing).Error
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return fmt.Errorf("query pipeline config: %w", err)
+		}
+
+		name := pipelineID
+		var pipeline model.PipelineInfo
+		if err := db.Where("id = ?", pipelineID).First(&pipeline).Error; err == nil && pipeline.Name != "" {
+			name = pipeline.Name
+		}
+
+		entity := model.PipelineConfig{
+			UserID:        userID,
+			PipelineID:    pipelineID,
+			Name:          name,
+			ReleaseUnitID: releaseUnitID,
+		}
+		if err := db.Create(&entity).Error; err != nil {
+			return fmt.Errorf("create pipeline config: %w", err)
+		}
+		return nil
+	}
+
+	if err := db.Model(&existing).Updates(map[string]interface{}{
+		"release_unit_id": releaseUnitID,
+	}).Error; err != nil {
+		return fmt.Errorf("update pipeline release unit binding: %w", err)
+	}
+
+	return nil
+}
+
 func (s *PipelineConfigService) List(userID uint) ([]PipelineConfigResponse, error) {
 	db := database.GetDB()
 	var rows []model.PipelineConfig
@@ -200,3 +240,53 @@ func (s *PipelineConfigService) List(userID uint) ([]PipelineConfigResponse, err
 	}
 	return res, nil
 }
+
+func (s *PipelineConfigService) Get(userID uint, pipelineID string) (*PipelineConfigResponse, error) {
+	if pipelineID == "" {
+		return nil, fmt.Errorf("pipeline_id is required")
+	}
+
+	db := database.GetDB()
+	var row model.PipelineConfig
+	if err := db.Where("user_id = ? AND pipeline_id = ?", userID, pipelineID).First(&row).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("pipeline config not found")
+		}
+		return nil, fmt.Errorf("query pipeline config: %w", err)
+	}
+
+	item := &PipelineConfigResponse{
+		PipelineID:       row.PipelineID,
+		Name:             row.Name,
+		ReleaseUnitID:    row.ReleaseUnitID,
+		RepositoryType:   row.RepositoryType,
+		AutoMerge:        row.AutoMerge,
+		AutoTag:          row.AutoTag,
+		DisplayOrder:     row.DisplayOrder,
+		RepoURL:          row.RepoURL,
+		Branch:           row.Branch,
+		GitUsername:      row.GitUsername,
+		GitToken:         row.GitToken,
+		GitCredentialKey: row.GitCredentialKey,
+		GitUsernameField: row.GitUsernameField,
+		GitTokenField:    row.GitTokenField,
+		ProjectPath:      row.ProjectPath,
+		BuildType:        row.BuildType,
+		MavenCommand:     row.MavenCommand,
+		GradleCommand:    row.GradleCommand,
+		NPMCommand:       row.NPMCommand,
+		DeployType:       row.DeployType,
+		DockerImage:      row.DockerImage,
+		DockerContainer:  row.DockerContainer,
+		DockerRunArgs:    row.DockerRunArgs,
+	}
+	if row.MainStagesJSON != "" {
+		_ = json.Unmarshal([]byte(row.MainStagesJSON), &item.MainStages)
+	}
+	if row.EnvStagesJSON != "" {
+		_ = json.Unmarshal([]byte(row.EnvStagesJSON), &item.EnvStages)
+	}
+	return item, nil
+}
+
+

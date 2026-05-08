@@ -69,6 +69,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { deleteGlobalVar, listGlobalVars, saveGlobalVar } from '../api/globalVars'
 
 const globalVariables = ref([])
 const varModalOpen = ref(false)
@@ -81,35 +82,13 @@ const editingVar = ref({
 
 const token = computed(() => localStorage.getItem('token') || '')
 
-const fetchJson = async (url, options = {}) => {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token.value}`,
-      ...(options.headers || {}),
-    },
-  })
-  const text = await res.text()
-  let data = {}
-  try {
-    data = text ? JSON.parse(text) : {}
-  } catch {
-    data = {}
-  }
-  if (!res.ok) {
-    throw new Error(data?.error || data?.message || `HTTP ${res.status}`)
-  }
-  return data
-}
-
 const loadGlobalVariables = async () => {
   if (!token.value) {
     globalVariables.value = []
     return
   }
   try {
-    const data = await fetchJson('/api/global-vars', { method: 'GET' })
+    const data = await listGlobalVars(token.value)
     globalVariables.value = Array.isArray(data.items) ? data.items : []
   } catch (err) {
     message.error(`加载变量失败: ${err.message}`)
@@ -214,13 +193,10 @@ const saveVariable = async () => {
   }
 
   try {
-    await fetchJson('/api/global-vars', {
-      method: 'PUT',
-      body: JSON.stringify({
-        key: editingVar.value.key,
-        fields: apiFields,
-        description: editingVar.value.description || '',
-      }),
+    await saveGlobalVar(token.value, {
+      key: editingVar.value.key,
+      fields: apiFields,
+      description: editingVar.value.description || '',
     })
     message.success(editingVar.value.id ? '变量已保存' : '变量已创建')
     varModalOpen.value = false
@@ -232,9 +208,7 @@ const saveVariable = async () => {
 
 const deleteVariable = async (id) => {
   try {
-    await fetchJson(`/api/global-vars/${id}`, {
-      method: 'DELETE',
-    })
+    await deleteGlobalVar(token.value, id)
     message.success('变量已删除')
     await loadGlobalVariables()
   } catch (err) {

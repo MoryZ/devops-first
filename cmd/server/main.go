@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
@@ -89,6 +90,15 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
+	// Configure CORS to allow frontend requests with Authorization header
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173", "http://127.0.0.1:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * 60 * 60, // 12 hours
+	}))
 	if err := router.SetTrustedProxies(cfg.Proxies); err != nil {
 		log.Fatalf("set trusted proxies failed: %v", err)
 	}
@@ -136,13 +146,16 @@ func main() {
 	{
 		protectedGroup.GET("/ws/deploy", deployHandler.HandleDeployWS)
 		protectedGroup.GET("/api/pipelines", handler.HandleListPipelineConfigs)
+		protectedGroup.GET("/api/pipelines/:id/config", handler.HandleGetPipelineConfig)
 		protectedGroup.PUT("/api/pipelines/config", handler.HandleUpsertPipelineConfig)
+		protectedGroup.PUT("/api/pipelines/:id/release-unit", handler.HandleUpsertPipelineReleaseUnitBinding)
 
 		// Pipeline execution routes
 		protectedGroup.POST("/api/pipelines/:id/execute", handler.HandleSubmitExecution)
 		protectedGroup.GET("/api/pipelines/:id/executions", handler.HandleGetBatchHistory)
 		protectedGroup.GET("/api/executions/:batch_id", handler.HandleGetBatchStatus)
 		protectedGroup.GET("/api/executions/:batch_id/logs", handler.HandleGetBatchLogs)
+		protectedGroup.GET("/api/executions/:batch_id/commits", handler.HandleGetBatchCommits)
 		protectedGroup.POST("/api/executions/:batch_id/cancel", handler.HandleCancelBatch)
 		protectedGroup.POST("/api/executions/:batch_id/rerun-node", handler.HandleRerunNode)
 		protectedGroup.GET("/ws/execute/:batch_id", handler.HandleExecutionWebSocket)

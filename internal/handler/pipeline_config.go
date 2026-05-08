@@ -8,6 +8,10 @@ import (
 	"devops-first/internal/service"
 )
 
+type PipelineReleaseUnitBindingRequest struct {
+	ReleaseUnitID string `json:"release_unit_id"`
+}
+
 func getUserID(c *gin.Context) (uint, bool) {
 	raw, ok := c.Get("user_id")
 	if !ok {
@@ -51,6 +55,59 @@ func HandleUpsertPipelineConfig(c *gin.Context) {
 
 	svc := service.NewPipelineConfigService()
 	if err := svc.Upsert(userID, req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// HandleGetPipelineConfig returns one pipeline config by pipeline ID.
+func HandleGetPipelineConfig(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	pipelineID := c.Param("id")
+	if pipelineID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "pipeline id is required"})
+		return
+	}
+
+	svc := service.NewPipelineConfigService()
+	item, err := svc.Get(userID, pipelineID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+// HandleUpsertPipelineReleaseUnitBinding creates or updates only release unit binding for a pipeline.
+func HandleUpsertPipelineReleaseUnitBinding(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	pipelineID := c.Param("id")
+	if pipelineID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "pipeline id is required"})
+		return
+	}
+
+	var req PipelineReleaseUnitBindingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	svc := service.NewPipelineConfigService()
+	if err := svc.UpsertReleaseUnitBinding(userID, pipelineID, req.ReleaseUnitID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

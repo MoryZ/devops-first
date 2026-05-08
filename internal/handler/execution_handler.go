@@ -109,6 +109,30 @@ func HandleGetBatchLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"logs": logs, "count": len(logs)})
 }
 
+// HandleGetBatchCommits handles GET /api/executions/:batch_id/commits
+func HandleGetBatchCommits(c *gin.Context) {
+	batchID := c.Param("batch_id")
+	if batchID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "batch_id is required"})
+		return
+	}
+
+	limit := 20
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	items, err := executionService.GetBatchCommits(batchID, limit)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"items": items, "count": len(items)})
+}
+
 // HandleGetBatchHistory handles GET /api/pipelines/:id/executions
 func HandleGetBatchHistory(c *gin.Context) {
 	pipelineID := c.Param("id")

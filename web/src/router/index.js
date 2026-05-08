@@ -3,6 +3,7 @@ import DashboardView from '../views/DashboardView.vue'
 import LoginView from '../views/LoginView.vue'
 import PipelineExecutionsView from '../views/PipelineExecutionsView.vue'
 import PipelineBPMDesignerView from '../views/PipelineBPMDesignerView.vue'
+import PipelineExecutionStageDetailView from '../views/PipelineExecutionStageDetailView.vue'
 
 const routes = [
   {
@@ -22,6 +23,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/plans',
+    name: 'iteration-plans',
+    component: DashboardView,
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/release-units',
     name: 'release-units',
     component: DashboardView,
@@ -37,6 +44,18 @@ const routes = [
     path: '/pipelines/:id/executions',
     name: 'pipeline-executions',
     component: PipelineExecutionsView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/pipelines/:id/executions/:batchId/stage/:stageKey',
+    name: 'pipeline-execution-stage-detail',
+    component: PipelineExecutionStageDetailView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/pipelines/all',
+    name: 'pipeline-all',
+    component: DashboardView,
     meta: { requiresAuth: true },
   },
   {

@@ -1,25 +1,20 @@
 <template>
   <div class="plan-list-panel">
+    <div class="panel-header">
+      <span class="panel-title">迭代计划</span>
+      <a-button type="primary" class="create-btn" :disabled="!workspace.selectedSystemId" @click="showCreateModal">
+        新建
+      </a-button>
+    </div>
+
     <div class="plan-search-row">
       <a-input-search v-model:value="keyword" placeholder="输入关键词/负责人/版本" allow-clear />
     </div>
 
-    <div class="panel-header">
-      <span class="panel-title">迭代计划</span>
-    </div>
     <div class="plan-filter-row">
-      <a-tag class="filter-tag action-tag" :class="{ disabled: !workspace.selectedSystemId }" @click="showCreateModal">
-        <PlusOutlined />
-        创建计划
-      </a-tag>
       <a-tag :color="activeFilter === 'mine' ? 'blue' : 'default'" class="filter-tag" @click="activeFilter = 'mine'">我的计划</a-tag>
-      <a-tag :color="activeFilter === 'all' ? 'blue' : 'default'" class="filter-tag" @click="activeFilter = 'all'">全部计划</a-tag>
     </div>
-    <div class="plan-list-header-row">
-      <span>版本</span>
-      <span>状态</span>
-      <span>计划日期</span>
-    </div>
+
     <div class="plan-list">
       <div
         v-for="plan in filteredPlans"
@@ -30,10 +25,13 @@
       >
         <span class="plan-version">{{ plan.version }}</span>
         <span class="plan-status"><a-tag :color="statusColor[plan.status]">{{ plan.status }}</a-tag></span>
-        <span class="plan-date">{{ plan.planned_date || '-' }}</span>
       </div>
 
       <div v-if="filteredPlans.length === 0" class="empty-hint">当前筛选条件下暂无迭代计划</div>
+    </div>
+
+    <div class="plan-footer">
+      <a-button block class="view-all-btn" @click="activeFilter = 'all'">查看全部计划</a-button>
     </div>
 
     <!-- Create Plan Modal -->
@@ -63,8 +61,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { PlusOutlined } from '@ant-design/icons-vue'
 import { useWorkspaceStore } from '../stores/workspace'
+import { createPlan, listPipelinesByPlan, listPlansBySystem } from '../api/plans'
+import { createSystemPipeline } from '../api/systems'
+import { getPipelineConfig, upsertPipelineConfig } from '../api/pipelines'
 
 const props = defineProps({
   token: String,
@@ -119,6 +119,106 @@ const saveCreatedPlanIds = () => {
   localStorage.setItem('createdPlanIds', JSON.stringify(Array.from(createdPlanIds.value)))
 }
 
+const normalizePlan = (item) => ({
+  id: String(item.ID || item.id),
+  system_id: String(item.SystemID || item.system_id),
+  version: item.Version || item.version,
+  status: item.Status || item.status || 'planning',
+  planned_date: item.PlannedDate || item.planned_date,
+  description: item.Description || item.description,
+  created_at: item.CreatedAt || item.created_at,
+  updated_at: item.UpdatedAt || item.updated_at,
+})
+
+const planTime = (plan) => {
+  const candidates = [plan.planned_date, plan.updated_at, plan.created_at]
+  for (const v of candidates) {
+    if (!v) continue
+    const t = new Date(v).getTime()
+    if (!Number.isNaN(t)) return t
+  }
+  return 0
+}
+
+const inheritReleaseUnitsFromLatestReleasedPlan = async (created) => {
+  const newPlanId = String(created.ID || created.id || '')
+  if (!newPlanId || !workspace.selectedSystemId) return 0
+
+  const planData = await listPlansBySystem(props.token, workspace.selectedSystemId)
+  const allPlans = (planData?.items || []).map(normalizePlan)
+
+  const sourcePlan = allPlans
+    .filter((p) => p.id !== newPlanId && String(p.status || '').toLowerCase() === 'released')
+    .sort((a, b) => planTime(b) - planTime(a))[0]
+
+  if (!sourcePlan) return 0
+
+  const sourcePipelinesData = await listPipelinesByPlan(props.token, sourcePlan.id)
+  const sourcePipelines = sourcePipelinesData?.items || []
+  if (!sourcePipelines.length) return 0
+
+  let inheritedCount = 0
+
+  for (const src of sourcePipelines) {
+    const srcPipelineId = String(src.ID || src.id)
+    let srcConfig
+    try {
+      srcConfig = await getPipelineConfig(props.token, srcPipelineId)
+    } catch {
+      continue
+    }
+
+    const releaseUnitId = String(srcConfig?.release_unit_id || srcConfig?.releaseUnitId || '')
+    if (!releaseUnitId) continue
+
+    const srcName = src.Name || src.name || `pipeline-${inheritedCount + 1}`
+    const appType = src.AppType || src.app_type || 'java'
+    const srcDesc = src.Description || src.description || `${srcName} 自动继承`
+
+    let createdPipeline
+    try {
+      createdPipeline = await createSystemPipeline(props.token, workspace.selectedSystemId, {
+        plan_id: newPlanId,
+        name: srcName,
+        app_type: appType,
+        description: srcDesc,
+      })
+    } catch {
+      createdPipeline = await createSystemPipeline(props.token, workspace.selectedSystemId, {
+        plan_id: newPlanId,
+        name: `${srcName}-${created.Version || created.version || 'new'}`,
+        app_type: appType,
+        description: srcDesc,
+      })
+    }
+
+    await upsertPipelineConfig(props.token, {
+      ...srcConfig,
+      pipeline_id: createdPipeline.ID || createdPipeline.id,
+      name: createdPipeline.Name || createdPipeline.name || srcName,
+      release_unit_id: releaseUnitId,
+    })
+
+    inheritedCount += 1
+  }
+
+  return inheritedCount
+}
+
+const loadPlans = async (systemId) => {
+  try {
+    const data = await listPlansBySystem(props.token, systemId)
+    plans.value = (data?.items || []).map(normalizePlan)
+    const currentPlanId = String(selectedPlanId.value || '')
+    if (plans.value.length > 0 && !plans.value.some((p) => p.id === currentPlanId)) {
+      selectedPlanId.value = plans.value[0].id
+    }
+    activeFilter.value = 'all'
+  } catch (err) {
+    message.error('加载计划列表失败: ' + (err?.message || '未知错误'))
+  }
+}
+
 watch(
   () => workspace.selectedSystemId,
   async (newSystemId) => {
@@ -132,38 +232,8 @@ watch(
   { immediate: true }
 )
 
-const loadPlans = async (systemId) => {
-  try {
-    const res = await fetch(`/api/systems/${systemId}/plans`, {
-      headers: { Authorization: `Bearer ${props.token}` },
-    })
-    if (res.ok) {
-      const data = await res.json()
-      plans.value = (data.items || []).map((item) => ({
-        id: item.ID || item.id,
-        system_id: item.SystemID || item.system_id,
-        version: item.Version || item.version,
-        status: item.Status || item.status || 'planning',
-        planned_date: item.PlannedDate || item.planned_date,
-        description: item.Description || item.description,
-        created_at: item.CreatedAt || item.created_at,
-        updated_at: item.UpdatedAt || item.updated_at,
-      }))
-      if (!plans.value.some((p) => p.id === selectedPlanId.value)) {
-        selectedPlanId.value = ''
-      }
-      activeFilter.value = 'all'
-    } else {
-      message.error('加载计划列表失败')
-    }
-  } catch (err) {
-    message.error('加载计划列表失败: ' + err.message)
-  }
-}
-
 const selectPlan = (plan) => {
-  selectedPlanId.value = plan.id
-  workspace.selectPlan(plan.id)
+  selectedPlanId.value = String(plan.id)
 }
 
 const showCreateModal = () => {
@@ -182,27 +252,25 @@ const handleCreatePlan = async () => {
   }
 
   try {
-    const res = await fetch(`/api/systems/${workspace.selectedSystemId}/plans`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${props.token}`,
-      },
-      body: JSON.stringify(newPlan.value),
-    })
-    if (res.ok) {
-      const created = await res.json()
-      createdPlanIds.value.add(created.ID || created.id)
-      saveCreatedPlanIds()
-      message.success('计划创建成功')
-      createModalOpen.value = false
-      await loadPlans(workspace.selectedSystemId)
-    } else {
-      const err = await res.json()
-      message.error(err.error || '创建失败')
+    const created = await createPlan(props.token, workspace.selectedSystemId, newPlan.value)
+    let inheritedCount = 0
+    try {
+      inheritedCount = await inheritReleaseUnitsFromLatestReleasedPlan(created)
+    } catch (inheritErr) {
+      console.warn('Failed to inherit release units from latest released plan:', inheritErr)
     }
+
+    createdPlanIds.value.add(created.ID || created.id)
+    saveCreatedPlanIds()
+    if (inheritedCount > 0) {
+      message.success(`计划创建成功，已默认关联上个已发布迭代的 ${inheritedCount} 个发布单元`)
+    } else {
+      message.success('计划创建成功')
+    }
+    createModalOpen.value = false
+    await loadPlans(workspace.selectedSystemId)
   } catch (err) {
-    message.error('网络错误: ' + err.message)
+    message.error('创建失败: ' + (err?.message || '未知错误'))
   }
 }
 
@@ -212,6 +280,8 @@ loadCreatedPlanIds()
 <style scoped>
 .plan-list-panel {
   height: 100%;
+  min-height: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   background: #fff;
@@ -228,15 +298,20 @@ loadCreatedPlanIds()
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px;
+  padding: 12px 12px 8px;
   border-bottom: 1px solid #e8e8e8;
+}
+
+.create-btn {
+  min-width: 84px;
+  height: 32px;
+  border-radius: 8px;
 }
 
 .plan-filter-row {
   display: flex;
   gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #e8e8e8;
+  padding: 8px 10px 6px;
   background: #fff;
 }
 
@@ -245,52 +320,32 @@ loadCreatedPlanIds()
   user-select: none;
 }
 
-.action-tag {
-  color: #1f56ba;
-  border-color: #b7cff8;
-}
-
-.action-tag.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .panel-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: #1f2d3d;
 }
 
 .plan-list {
   flex: 1;
   overflow-y: auto;
-  padding: 10px;
+  padding: 4px 8px 8px;
   background: linear-gradient(180deg, #f8faff 0%, #f2f6fc 100%);
 }
 
-.plan-list-header-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 10px;
-  padding: 8px 12px;
-  color: #7d8ea9;
-  font-size: 12px;
-  border-bottom: 1px solid #e3e9f3;
-  background: #fff;
-}
-
 .plan-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 10px;
+  display: flex;
   align-items: center;
-  margin-bottom: 8px;
-  padding: 10px;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+  padding: 9px 10px;
   cursor: pointer;
   transition: all 0.3s;
   border: 1px solid #dbe4f2 !important;
   background: #ffffff;
-  border-radius: 10px;
+  border-radius: 9px;
 }
 
 .plan-row:hover {
@@ -299,27 +354,47 @@ loadCreatedPlanIds()
 }
 
 .plan-row.active {
-  background: linear-gradient(135deg, #1d67d9 0%, #2d79ea 100%);
-  border: 1px solid #1d67d9 !important;
+  background: linear-gradient(135deg, #3d7df2 0%, #2a66da 100%);
+  border-color: #2a66da !important;
+  box-shadow: 0 10px 20px rgba(42, 102, 218, 0.22);
+}
+
+.plan-row.active .plan-version {
+  color: #fff;
 }
 
 .plan-version {
-  font-weight: 600;
-  color: #0c47a1;
-  font-size: 14px;
-  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #21406d;
+  line-height: 1.3;
 }
 
-.plan-date {
-  color: #8a92a8;
-  font-size: 12px;
+.plan-status :deep(.ant-tag) {
+  margin-inline-end: 0;
+  border-radius: 999px;
 }
 
 .empty-hint {
+  padding: 40px 12px;
   text-align: center;
-  color: #8fa0bb;
+  color: #8b99b2;
   font-size: 12px;
-  margin-top: 20px;
+}
+
+.plan-footer {
+  margin-top: auto;
+  padding: 10px;
+  border-top: 1px solid #e8eef7;
+  background: #fff;
+}
+
+.view-all-btn {
+  height: 36px;
+  border-radius: 9px;
+  border-color: #d8e2f0;
+  color: #385680;
+  background: #f7faff;
 }
 
 .plan-row.active .plan-version,

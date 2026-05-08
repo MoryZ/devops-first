@@ -332,6 +332,7 @@ import { message } from 'ant-design-vue'
 import { PlusOutlined, HolderOutlined, MinusCircleOutlined } from '@ant-design/icons-vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import ExecutionConsole from './ExecutionConsole.vue'
+import { upsertPipelineConfig } from '../api/pipelines'
 
 const props = defineProps({
   open: Boolean,
@@ -499,13 +500,7 @@ const handleSave = async () => {
   }
 
   try {
-    const res = await fetch('/api/pipelines/config', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${props.token}`,
-      },
-      body: JSON.stringify({
+    await upsertPipelineConfig(props.token, {
         pipeline_id: props.pipelineId,
         name: props.pipelineName,
         release_unit_id: form.value.releaseUnitId,
@@ -532,13 +527,7 @@ const handleSave = async () => {
         retry_count: form.value.retryCount,
         timeout_minutes: form.value.timeoutMinutes,
         notify_channels: form.value.notifyChannels,
-      }),
     })
-    if (!res.ok) {
-      const err = await res.json()
-      message.error(err.error || '保存失败')
-      return
-    }
     message.success('流程配置已保存')
     emit('save')
   } catch (err) {

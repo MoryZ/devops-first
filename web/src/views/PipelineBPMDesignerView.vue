@@ -276,6 +276,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import { listGlobalVars } from '../api/globalVars'
+import { getPipelineBpm, listTaskTemplates, savePipelineBpm } from '../api/pipelineDesigner'
 
 const route = useRoute()
 const globalVariables = ref([])
@@ -471,35 +473,13 @@ const onCredentialNamespaceChange = (stage) => {
 
 const filterVariableOption = (input, option) => String(option?.value || '').toLowerCase().includes(String(input || '').toLowerCase())
 
-const fetchJson = async (url, options = {}) => {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token.value}`,
-      ...(options.headers || {}),
-    },
-  })
-  const text = await res.text()
-  let data = {}
-  try {
-    data = text ? JSON.parse(text) : {}
-  } catch {
-    data = {}
-  }
-  if (!res.ok) {
-    throw new Error(data?.error || data?.message || `HTTP ${res.status}`)
-  }
-  return data
-}
-
 const loadGlobalVariables = async () => {
   if (!token.value) {
     globalVariables.value = []
     return
   }
   try {
-    const data = await fetchJson('/api/global-vars', { method: 'GET' })
+    const data = await listGlobalVars(token.value)
     globalVariables.value = Array.isArray(data.items) ? data.items : []
   } catch {
     globalVariables.value = []
@@ -642,7 +622,7 @@ const loadTemplates = async () => {
   templates.value = defaultTemplates()
 
   try {
-    const data = await fetchJson('/api/task-templates', { method: 'GET' })
+    const data = await listTaskTemplates(token.value)
     const list = Array.isArray(data.data) ? data.data : []
     if (list.length > 0) {
       templates.value = list.map(normalizeTemplate)
@@ -698,10 +678,7 @@ const saveDefinition = async () => {
   }
 
   try {
-    await fetchJson(`/api/pipelines/${pipelineId.value}/bpm`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    })
+    await savePipelineBpm(token.value, pipelineId.value, payload)
     message.success('流程已保存')
   } catch (err) {
     message.error(`保存失败: ${err.message}`)
@@ -710,7 +687,7 @@ const saveDefinition = async () => {
 
 const loadDefinition = async () => {
   try {
-    const data = await fetchJson(`/api/pipelines/${pipelineId.value}/bpm`, { method: 'GET' })
+    const data = await getPipelineBpm(token.value, pipelineId.value)
     const def = data.definition || {}
     pipelineTriggerMode.value = def?.meta?.pipelineTriggerMode || 'auto'
 

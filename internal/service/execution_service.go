@@ -2,6 +2,9 @@ package service
 
 import (
 	"fmt"
+	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	"devops-first/internal/database"
@@ -11,6 +14,13 @@ import (
 // ExecutionService handles pipeline execution requests
 type ExecutionService struct {
 	queue *ExecutionQueue
+}
+
+type CommitRecord struct {
+	CodeVersion string `json:"code_version"`
+	Content     string `json:"content"`
+	Author      string `json:"author"`
+	CommittedAt string `json:"committed_at"`
 }
 
 // NewExecutionService creates a new execution service
@@ -43,7 +53,32 @@ func (es *ExecutionService) SubmitExecution(req *ExecuteRequest) (*ExecuteRespon
 	// Get pipeline config
 	var pipeline model.PipelineConfig
 	if err := db.Where("pipeline_id = ? AND user_id = ?", req.PipelineID, req.UserID).First(&pipeline).Error; err != nil {
-		return nil, fmt.Errorf("pipeline not found: %v", err)
+		// If config not found, create a default one
+		pipeline = model.PipelineConfig{
+			UserID:        req.UserID,
+			PipelineID:    req.PipelineID,
+			Name:          "Default Pipeline",
+			RepositoryType: "git",
+			AutoMerge:     true,
+			AutoTag:       true,
+			DisplayOrder:  0,
+			RepoURL:       "",
+			Branch:        "main",
+			GitUsername:   "",
+			GitToken:      "",
+			ProjectPath:   "/tmp/testproject",
+			BuildType:     "maven",
+			MavenCommand:  "mvn clean package -DskipTests",
+			DeployType:    "docker",
+			DockerImage:   "openjdk:11-jre",
+			DockerContainer: "test-container",
+			DockerRunArgs: "-d -p 8080:8080",
+			MainStagesJSON: `[{"name":"checkout","type":"checkout"},{"name":"build","type":"build"},{"name":"deploy","type":"deploy"}]`,
+			EnvStagesJSON:  `[]`,
+		}
+		if err := db.Create(&pipeline).Error; err != nil {
+			return nil, fmt.Errorf("failed to create default pipeline config: %v", err)
+		}
 	}
 
 	// Get batch number
@@ -135,6 +170,72 @@ func (es *ExecutionService) GetBatchLogs(batchID string, limit int) ([]*model.Ex
 	}
 
 	return logs, nil
+}
+
+// GetBatchCommits returns commit history for the batch's work tree.
+func (es *ExecutionService) GetBatchCommits(batchID string, limit int) ([]CommitRecord, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	batch, err := es.GetBatchStatus(batchID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fallback if workdir is unavailable.
+	fallback := func() []CommitRecord {
+		if strings.TrimSpace(batch.CommitID) == "" {
+			return []CommitRecord{}
+		}
+		return []CommitRecord{{
+			CodeVersion: batch.CommitID,
+			Content:     "-",
+			Author:      "-",
+			CommittedAt: "-",
+		}}
+	}
+
+	workDir := strings.TrimSpace(batch.WorkDir)
+	if workDir == "" {
+		return fallback(), nil
+	}
+
+	format := "%H%x1f%an%x1f%ad%x1f%s"
+	cmd := exec.Command("git", "-C", workDir, "log", "--date=format:%Y-%m-%d %H:%M:%S", "--pretty=format:"+format, "-n", strconv.Itoa(limit))
+	out, err := cmd.Output()
+	if err != nil {
+		return fallback(), nil
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	res := make([]CommitRecord, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\x1f")
+		rec := CommitRecord{}
+		if len(parts) > 0 {
+			rec.CodeVersion = strings.TrimSpace(parts[0])
+		}
+		if len(parts) > 1 {
+			rec.Author = strings.TrimSpace(parts[1])
+		}
+		if len(parts) > 2 {
+			rec.CommittedAt = strings.TrimSpace(parts[2])
+		}
+		if len(parts) > 3 {
+			rec.Content = strings.TrimSpace(parts[3])
+		}
+		res = append(res, rec)
+	}
+
+	if len(res) == 0 {
+		return fallback(), nil
+	}
+	return res, nil
 }
 
 // CancelBatch cancels a pending or running batch

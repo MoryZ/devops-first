@@ -143,6 +143,29 @@ func (eq *ExecutionQueue) worker() {
 	}
 }
 
+// setNodeStatus updates a single stage's status in batch.StagesStatusJSON and persists to DB.
+func (eq *ExecutionQueue) setNodeStatus(batch *model.ExecutionBatch, stageName, status string) {
+	current := make(map[string]string)
+	if batch.StagesStatusJSON != "" {
+		_ = json.Unmarshal([]byte(batch.StagesStatusJSON), &current)
+	}
+	current[stageName] = status
+	b, _ := json.Marshal(current)
+	batch.StagesStatusJSON = string(b)
+	database.GetDB().Model(batch).Update("stages_status_json", batch.StagesStatusJSON)
+}
+
+// initNodeStatuses initializes all given stage names to "pending" in a single DB write.
+func (eq *ExecutionQueue) initNodeStatuses(batch *model.ExecutionBatch, names []string) {
+	statuses := make(map[string]string, len(names))
+	for _, n := range names {
+		statuses[n] = "pending"
+	}
+	b, _ := json.Marshal(statuses)
+	batch.StagesStatusJSON = string(b)
+	database.GetDB().Model(batch).Update("stages_status_json", batch.StagesStatusJSON)
+}
+
 // executeTask runs a full pipeline: source -> build -> deploy
 func (eq *ExecutionQueue) executeTask(task *ExecutionTask) {
 	batch := task.Batch
@@ -209,11 +232,24 @@ func (eq *ExecutionQueue) stageSource(batch *model.ExecutionBatch, pipeline *mod
 	gitDir := filepath.Join(workDir, ".git")
 	if _, err := os.Stat(gitDir); err == nil {
 		eq.logLine(batch.ID, "info", fmt.Sprintf("Repository exists, git pull origin %s", branch))
-		return eq.runCmd(batch.ID, "source", workDir, "git", "pull", "origin", branch)
+		if err := eq.runCmd(batch.ID, "source", workDir, "git", "pull", "origin", branch); err != nil {
+			return err
+		}
+	} else {
+		eq.logLine(batch.ID, "info", fmt.Sprintf("git clone [repo-hidden] (branch: %s)", branch))
+		if err := eq.runCmd(batch.ID, "source", workDir, "git", "clone", "--branch", branch, "--depth", "1", cloneURL, "."); err != nil {
+			return err
+		}
 	}
 
-	eq.logLine(batch.ID, "info", fmt.Sprintf("git clone [repo-hidden] (branch: %s)", branch))
-	return eq.runCmd(batch.ID, "source", workDir, "git", "clone", "--branch", branch, "--depth", "1", cloneURL, ".")
+	// Capture commit ID and persist to DB
+	if out, err := exec.Command("git", "-C", workDir, "rev-parse", "HEAD").Output(); err == nil {
+		commitID := strings.TrimSpace(string(out))
+		batch.CommitID = commitID
+		database.GetDB().Model(batch).Update("commit_id", commitID)
+		eq.logLine(batch.ID, "info", fmt.Sprintf("Commit: %s", commitID[:min(7, len(commitID))]))
+	}
+	return nil
 }
 
 func withGitAuth(repoURL, username, token string) string {
@@ -549,6 +585,18 @@ func (eq *ExecutionQueue) executeBPMGraph(task *ExecutionTask, g *bpmGraph, work
 	nodeStatus := make(map[string]string, len(g.Nodes))
 	executedCount := 0
 
+	// Initialize all non-start/end nodes to "pending"
+	pendingNames := make([]string, 0, len(g.Nodes))
+	for _, n := range g.Nodes {
+		nt := strings.ToLower(strings.TrimSpace(n.Type))
+		if nt != "start" && nt != "end" {
+			pendingNames = append(pendingNames, n.Name)
+		}
+	}
+	if len(pendingNames) > 0 {
+		eq.initNodeStatuses(batch, pendingNames)
+	}
+
 	for len(queue) > 0 {
 		id := queue[0]
 		queue = queue[1:]
@@ -565,11 +613,14 @@ func (eq *ExecutionQueue) executeBPMGraph(task *ExecutionTask, g *bpmGraph, work
 		if nodeType != "start" && nodeType != "end" {
 			executedCount++
 			eq.logLine(batch.ID, "info", fmt.Sprintf("[BPM] 执行节点: %s (%s)", node.Name, node.Type))
+			eq.setNodeStatus(batch, node.Name, "running")
 			if err := eq.executeBPMNode(task, workDir, node); err != nil {
 				nodeStatus[node.ID] = "failed"
+				eq.setNodeStatus(batch, node.Name, "failed")
 				return fmt.Errorf("node %s failed: %w", node.ID, err)
 			}
 			nodeStatus[node.ID] = "success"
+			eq.setNodeStatus(batch, node.Name, "success")
 		} else {
 			nodeStatus[node.ID] = "success"
 		}
@@ -950,14 +1001,24 @@ func (eq *ExecutionQueue) executeBPMByOrder(task *ExecutionTask, nodes []bpmNode
 		return items[i].Order < items[j].Order
 	})
 
+	// Initialize all nodes to "pending"
+	pendingNames := make([]string, 0, len(items))
+	for _, n := range items {
+		pendingNames = append(pendingNames, n.Name)
+	}
+	eq.initNodeStatuses(batch, pendingNames)
+
 	for i := 0; i < len(items); i++ {
 		node := items[i]
 		runMode := strings.ToLower(strings.TrimSpace(node.RunMode))
 		if runMode != "parallel" {
 			eq.logLine(batch.ID, "info", fmt.Sprintf("[BPM] 串行执行节点: %s", node.Name))
+			eq.setNodeStatus(batch, node.Name, "running")
 			if err := eq.executeBPMNode(task, workDir, node); err != nil {
+				eq.setNodeStatus(batch, node.Name, "failed")
 				return fmt.Errorf("node %s failed: %w", node.ID, err)
 			}
+			eq.setNodeStatus(batch, node.Name, "success")
 			continue
 		}
 
@@ -983,6 +1044,9 @@ func (eq *ExecutionQueue) executeBPMByOrder(task *ExecutionTask, nodes []bpmNode
 		} else {
 			eq.logLine(batch.ID, "info", fmt.Sprintf("[BPM] 并行执行组 %s，共 %d 个节点", groupKey, len(group)))
 		}
+		for _, n := range group {
+			eq.setNodeStatus(batch, n.Name, "running")
+		}
 		errCh := make(chan error, len(group))
 		var wg sync.WaitGroup
 		for _, n := range group {
@@ -991,7 +1055,10 @@ func (eq *ExecutionQueue) executeBPMByOrder(task *ExecutionTask, nodes []bpmNode
 			go func() {
 				defer wg.Done()
 				if err := eq.executeBPMNode(task, workDir, stageNode); err != nil {
+					eq.setNodeStatus(batch, stageNode.Name, "failed")
 					errCh <- fmt.Errorf("node %s failed: %w", stageNode.ID, err)
+				} else {
+					eq.setNodeStatus(batch, stageNode.Name, "success")
 				}
 			}()
 		}
@@ -1007,15 +1074,33 @@ func (eq *ExecutionQueue) executeBPMByOrder(task *ExecutionTask, nodes []bpmNode
 
 func (eq *ExecutionQueue) executeLegacyStages(task *ExecutionTask, workDir string) error {
 	batch := task.Batch
+	// Initialize all legacy stages to "pending"
+	legacyNames := []string{"代码检出", "编译构建", "部署上线"}
+	eq.initNodeStatuses(batch, legacyNames)
+
+	eq.setNodeStatus(batch, "代码检出", "running")
 	if err := eq.stageSource(batch, task.Pipeline, workDir); err != nil {
+		eq.setNodeStatus(batch, "代码检出", "failed")
 		return err
 	}
+	eq.setNodeStatus(batch, "代码检出", "success")
+
 	if task.Pipeline.BuildType != "none" {
+		eq.setNodeStatus(batch, "编译构建", "running")
 		if err := eq.stageBuild(batch, task.Pipeline, workDir); err != nil {
+			eq.setNodeStatus(batch, "编译构建", "failed")
 			return err
 		}
+		eq.setNodeStatus(batch, "编译构建", "success")
 	}
-	return eq.stageDeploy(batch, task.Pipeline, workDir)
+
+	eq.setNodeStatus(batch, "部署上线", "running")
+	if err := eq.stageDeploy(batch, task.Pipeline, workDir); err != nil {
+		eq.setNodeStatus(batch, "部署上线", "failed")
+		return err
+	}
+	eq.setNodeStatus(batch, "部署上线", "success")
+	return nil
 }
 
 // GetQueueStats returns current queue statistics

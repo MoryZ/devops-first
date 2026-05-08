@@ -8,6 +8,7 @@
         placeholder="请选择系统"
         :loading="loadingSystems"
         show-search
+        option-label-prop="label"
         option-filter-prop="label"
         :filter-option="filterSystemOption"
       >
@@ -15,13 +16,14 @@
           v-for="system in sortedSystems"
           :key="system.id"
           :value="system.id"
-          :label="`${system.name} · ${system.description || ''}`"
+          :label="getSystemPrimary(system)"
+          :title="`${getSystemPrimary(system)} ${getSystemSecondary(system)}`"
         >
           <div class="system-option">
             <div class="option-text">
-              <span class="option-main" :title="system.name">{{ system.name }}</span>
-              <span class="option-sub" :title="system.description || `ID: ${system.id.slice(0, 8)}`">
-                {{ system.description || `ID: ${system.id.slice(0, 8)}` }}
+              <span class="option-primary" :title="getSystemPrimary(system)">{{ getSystemPrimary(system) }}</span>
+              <span class="option-secondary" :title="getSystemSecondary(system)">
+                {{ getSystemSecondary(system) }}
               </span>
             </div>
             <button
@@ -80,6 +82,7 @@ import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined, StarFilled, StarOutlined } from '@ant-design/icons-vue'
 import { useWorkspaceStore } from '../stores/workspace'
+import { createSystem, listSystems } from '../api/systems'
 
 const props = defineProps({
   token: {
@@ -132,6 +135,16 @@ const saveFavorites = () => {
 
 const isFavorite = (id) => favoriteSystemIds.value.has(id)
 
+const getSystemPrimary = (system) => {
+  return system?.description?.trim() || system?.name || `ID: ${String(system?.id || '').slice(0, 8)}`
+}
+
+const getSystemSecondary = (system) => {
+  const name = system?.name || `ID: ${String(system?.id || '').slice(0, 8)}`
+  const description = system?.description?.trim() || name
+  return `${name}_${description}`
+}
+
 const toggleFavorite = (id) => {
   if (favoriteSystemIds.value.has(id)) {
     favoriteSystemIds.value.delete(id)
@@ -142,47 +155,17 @@ const toggleFavorite = (id) => {
 }
 
 const filterSystemOption = (input, option) => {
-  const text = `${option?.label || ''} ${option?.value || ''}`.toLowerCase()
+  const text = `${option?.label || ''} ${option?.title || ''} ${option?.value || ''}`.toLowerCase()
   return text.includes(input.toLowerCase())
-}
-
-const parseErrorText = async (res, fallback) => {
-  const text = await res.text()
-  if (!text) return fallback
-  try {
-    const json = JSON.parse(text)
-    return json.error || fallback
-  } catch {
-    return text
-  }
-}
-
-const requestWithTimeout = async (url, options = {}, timeoutMs = 10000) => {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    return await fetch(url, { ...options, signal: controller.signal })
-  } finally {
-    clearTimeout(timeoutId)
-  }
 }
 
 const loadSystems = async () => {
   loadingSystems.value = true
   try {
-    const res = await requestWithTimeout('/api/systems', {
-      headers: { Authorization: `Bearer ${props.token}` },
-    })
-    if (!res.ok) {
-      const errMsg = await parseErrorText(res, '系统列表加载失败')
-      message.error(errMsg)
-      return
-    }
-    const data = await res.json()
+    const data = await listSystems(props.token)
     workspace.setSystems(data.items || [])
   } catch (err) {
-    const msg = err?.name === 'AbortError' ? '请求超时，请检查前后端服务状态后重试' : err.message
-    message.error('系统列表加载失败: ' + msg)
+    message.error('系统列表加载失败: ' + (err?.message || '未知错误'))
   } finally {
     loadingSystems.value = false
   }
@@ -201,29 +184,13 @@ const handleCreateSystem = async () => {
 
   creating.value = true
   try {
-    const res = await requestWithTimeout('/api/systems', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${props.token}`,
-      },
-      body: JSON.stringify(newSystem.value),
-    })
-
-    if (!res.ok) {
-      const errMsg = await parseErrorText(res, '创建系统失败')
-      message.error(errMsg)
-      return
-    }
-
-    const created = await res.json()
+    const created = await createSystem(props.token, newSystem.value)
     await loadSystems()
     workspace.selectSystem(created.ID || created.id)
     createModalOpen.value = false
     message.success('系统创建成功')
   } catch (err) {
-    const msg = err?.name === 'AbortError' ? '请求超时，请检查前后端服务状态后重试' : err.message
-    message.error('创建系统失败: ' + msg)
+    message.error('创建系统失败: ' + (err?.message || '未知错误'))
   } finally {
     creating.value = false
   }
@@ -265,7 +232,7 @@ onMounted(loadFavorites)
 
 .system-selector-wrap.compact .selector-label {
   color: #d7e5ff;
-  font-size: 12px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
@@ -274,17 +241,21 @@ onMounted(loadFavorites)
 }
 
 .system-selector-wrap.compact :deep(.ant-select-selector) {
-  background: rgba(255, 255, 255, 0.92) !important;
-  border-color: rgba(184, 206, 246, 0.5) !important;
+  background: rgba(18, 41, 77, 0.85) !important;
+  border-color: rgba(127, 161, 219, 0.45) !important;
   border-radius: 8px !important;
 }
 
 .system-selector-wrap.compact :deep(.ant-select-arrow) {
-  color: #4f617c;
+  color: #d8e8ff;
 }
 
-/* 选中态只显示系统名，隐藏 sub + 星星 */
-.system-selector-wrap.compact :deep(.ant-select-selection-item .option-sub),
+.system-selector-wrap.compact :deep(.ant-select-selection-item) {
+  color: #e7f1ff;
+}
+
+/* 选中态仅显示第一行（description），隐藏第二行和星标 */
+.system-selector-wrap.compact :deep(.ant-select-selection-item .option-secondary),
 .system-selector-wrap.compact :deep(.ant-select-selection-item .option-star-btn) {
   display: none;
 }
@@ -293,9 +264,17 @@ onMounted(loadFavorites)
   justify-content: flex-start;
 }
 
-.system-selector-wrap.compact :deep(.ant-select-selection-item .option-main) {
+.system-selector-wrap.compact :deep(.ant-select-selection-item .option-primary) {
   max-width: 140px;
-  font-size: 13px;
+  font-size: 14px;
+}
+
+.system-selector-wrap.compact :deep(.ant-select) {
+  font-size: 14px;
+}
+
+.system-selector-wrap.compact :deep(.ant-select-selection-item) {
+  font-size: 14px;
 }
 
 .system-selector-wrap.compact .new-system-btn {
@@ -382,28 +361,29 @@ onMounted(loadFavorites)
 
 .option-text {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   min-width: 0;
   flex: 1;
 }
 
-.option-main {
+.option-primary {
   font-size: 13px;
   font-weight: 600;
   color: #1f2d3d;
-  max-width: 220px;
+  max-width: 100%;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.option-sub {
+.option-secondary {
   font-size: 12px;
   color: #7e8ca6;
   min-width: 0;
-  flex: 1;
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

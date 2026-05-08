@@ -39,6 +39,7 @@
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
+import { createSystem, listSystems } from '../api/systems'
 
 const props = defineProps({
   token: String,
@@ -66,15 +67,10 @@ onMounted(async () => {
 
 const loadSystems = async () => {
   try {
-    const res = await fetch('/api/systems', {
-      headers: { Authorization: `Bearer ${props.token}` },
-    })
-    if (res.ok) {
-      const data = await res.json()
-      systems.value = data.items || []
-      if (systems.value.length > 0 && !selectedSystemId.value) {
-        selectSystem(systems.value[0])
-      }
+    const data = await listSystems(props.token)
+    systems.value = data.items || []
+    if (systems.value.length > 0 && !selectedSystemId.value) {
+      selectSystem(systems.value[0])
     }
   } catch (err) {
     console.warn('Failed to load systems:', err)
@@ -98,24 +94,12 @@ const handleCreateSystem = async () => {
   }
 
   try {
-    const res = await fetch('/api/systems', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${props.token}`,
-      },
-      body: JSON.stringify(newSystem.value),
-    })
-    if (res.ok) {
-      message.success('系统创建成功')
-      createModalOpen.value = false
-      await loadSystems()
-    } else {
-      const err = await res.json()
-      message.error(err.error || '创建失败')
-    }
+    await createSystem(props.token, newSystem.value)
+    message.success('系统创建成功')
+    createModalOpen.value = false
+    await loadSystems()
   } catch (err) {
-    message.error('网络错误: ' + err.message)
+    message.error('创建失败: ' + (err?.message || '未知错误'))
   }
 }
 </script>

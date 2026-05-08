@@ -1,12 +1,11 @@
 <template>
   <header class="board-header">
     <div class="board-header-left">
+      <div class="workspace-label">我的工作台</div>
       <SystemSelector :token="token" compact />
     </div>
     <div class="board-brand">wizard</div>
     <div class="board-header-right">
-      <a-button type="text" class="icon-btn"><SearchOutlined /></a-button>
-      <a-button type="text" class="icon-btn"><FilterOutlined /></a-button>
       <a-button type="primary" class="run-btn">
         <RocketOutlined />
         快速执行
@@ -18,7 +17,7 @@
 </template>
 
 <script setup>
-import { SearchOutlined, FilterOutlined, RocketOutlined } from '@ant-design/icons-vue'
+import { RocketOutlined } from '@ant-design/icons-vue'
 import SystemSelector from './SystemSelector.vue'
 
 defineProps({
@@ -56,6 +55,13 @@ const handleLogout = () => {
   gap: 10px;
 }
 
+.workspace-label {
+  color: #b6c5e5;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .board-header-left {
   min-width: 0;
 }
@@ -66,10 +72,6 @@ const handleLogout = () => {
   font-weight: 700;
   letter-spacing: 0.5px;
   font-family: 'Avenir Next', 'Trebuchet MS', sans-serif;
-}
-
-.icon-btn {
-  color: #dce8ff;
 }
 
 .run-btn {

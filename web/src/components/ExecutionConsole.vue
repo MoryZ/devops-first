@@ -31,6 +31,7 @@ import { ref, onBeforeUnmount, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
+import { cancelExecutionBatch, startPipelineExecution } from '../api/executions'
 import 'xterm/css/xterm.css'
 
 const props = defineProps({
@@ -156,17 +157,7 @@ const handleStart = async () => {
 
   let batchId = ''
   try {
-    const submitRes = await fetch(`/api/pipelines/${encodeURIComponent(props.pipelineId)}/execute?system_id=${encodeURIComponent(props.systemId)}&triggered_by=manual`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${props.token}`,
-      },
-    })
-    if (!submitRes.ok) {
-      const errPayload = await submitRes.json()
-      throw new Error(errPayload.error || '提交执行失败')
-    }
-    const submitPayload = await submitRes.json()
+    const submitPayload = await startPipelineExecution(props.token, props.pipelineId, props.systemId)
     batchId = submitPayload.batch_id
     currentBatchId = batchId
   } catch (err) {
@@ -213,12 +204,7 @@ const handleStart = async () => {
 
 const handleStop = () => {
   if (currentBatchId && props.token) {
-    fetch(`/api/executions/${encodeURIComponent(currentBatchId)}/cancel`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${props.token}`,
-      },
-    }).catch(() => {})
+    cancelExecutionBatch(props.token, currentBatchId).catch(() => {})
   }
   if (ws) {
     ws.close(1000, 'user requested stop')

@@ -82,6 +82,7 @@
 <script setup>
 import { ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { login, register } from '../api/auth'
 
 const emit = defineEmits(['login-success'])
 
@@ -94,16 +95,6 @@ const form = ref({
   remark: '',
 })
 
-const readErrorMessage = async (response, fallback) => {
-  try {
-    const payload = await response.json()
-    return payload?.error || fallback
-  } catch {
-    const text = await response.text()
-    return text || fallback
-  }
-}
-
 const handleLogin = async () => {
   if (!form.value.username || !form.value.password) {
     message.warning('Please enter username and password')
@@ -112,22 +103,10 @@ const handleLogin = async () => {
 
   loading.value = true
   try {
-    const response = await fetch('/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: form.value.username,
-        password: form.value.password,
-      }),
+    const data = await login({
+      username: form.value.username,
+      password: form.value.password,
     })
-
-    if (!response.ok) {
-      const errMsg = await readErrorMessage(response, 'Login failed')
-      message.error(errMsg)
-      return
-    }
-
-    const data = await response.json()
     localStorage.setItem('token', data.token)
     localStorage.setItem('user', JSON.stringify(data.user))
     message.success('Login successful')
@@ -151,24 +130,12 @@ const handleRegister = async () => {
 
   loading.value = true
   try {
-    const response = await fetch('/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: form.value.username,
-        password: form.value.password,
-        email: form.value.email || undefined,
-        remark: form.value.remark || undefined,
-      }),
+    await register({
+      username: form.value.username,
+      password: form.value.password,
+      email: form.value.email || undefined,
+      remark: form.value.remark || undefined,
     })
-
-    if (!response.ok) {
-      const errMsg = await readErrorMessage(response, 'Registration failed')
-      message.error(errMsg)
-      return
-    }
-
-    await response.json()
     isRegMode.value = false
     form.value = {
       username: form.value.username,

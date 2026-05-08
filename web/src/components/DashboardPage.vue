@@ -8,37 +8,47 @@
 
     <div class="board-main">
       <aside class="sidebar">
-        <button class="side-item" :class="{ active: activePage === 'workspace' }" @click="setActivePage('workspace')">
+        <button class="side-item" :class="{ active: activePage === 'workspace' }" @click="setActivePage('workspace')" title="流水线">
           <DeploymentUnitOutlined />
+          <span class="side-label">流水线</span>
         </button>
-        <button class="side-item" :class="{ active: activePage === 'release-units' }" @click="setActivePage('release-units')">
+        <button class="side-item" :class="{ active: activePage === 'iteration-plans' }" @click="setActivePage('iteration-plans')" title="迭代计划">
+          <ProfileOutlined />
+          <span class="side-label">迭代计划</span>
+        </button>
+        <button class="side-item" :class="{ active: activePage === 'release-units' }" @click="setActivePage('release-units')" title="发布单元">
           <ApartmentOutlined />
+          <span class="side-label">发布单元</span>
         </button>
-        <button class="side-item" :class="{ active: activePage === 'global-vars' }" @click="setActivePage('global-vars')">
+        <button class="side-item" :class="{ active: activePage === 'global-vars' }" @click="setActivePage('global-vars')" title="全局变量">
           <AppstoreOutlined />
+          <span class="side-label">全局变量</span>
         </button>
-        <button class="side-item"><BuildOutlined /></button>
-        <button class="side-item"><SettingOutlined /></button>
-
+        <button class="side-item" disabled title="敬请期待">
+          <BuildOutlined />
+          <span class="side-label">构建</span>
+        </button>
+        <button class="side-item" disabled title="敬请期待">
+          <SettingOutlined />
+          <span class="side-label">设置</span>
+        </button>
       </aside>
 
       <div class="board-content">
-        <div class="context-strip">
-          <span v-for="(item, idx) in contextBreadcrumbs" :key="idx" class="context-item" :class="{ active: idx === contextBreadcrumbs.length - 1 }">
-            {{ item }}
-            <span v-if="idx < contextBreadcrumbs.length - 1" class="context-sep"> / </span>
-          </span>
-        </div>
-
-        <div v-if="activePage === 'workspace'" class="two-panel-layout">
-          <div class="panel-column plan-column">
+        <div v-if="activePage === 'iteration-plans'" class="iteration-layout">
+          <div class="iteration-left">
             <PlanList :token="token" />
           </div>
-
-          <div class="panel-column pipeline-column">
-            <PipelineBoard :token="token" @edit-pipeline="openPipelineConfig" />
+          <div class="iteration-right">
+            <PlanReleaseUnitsPanel :token="token" />
           </div>
         </div>
+
+        <div v-else-if="activePage === 'workspace'" class="pipeline-layout">
+          <PipelineBoard :token="token" @edit-pipeline="openPipelineConfig" />
+        </div>
+
+        <PipelineAllListPanel v-else-if="activePage === 'pipeline-all'" :token="token" />
 
         <GlobalVariablesView v-else-if="activePage === 'global-vars'" />
 
@@ -46,7 +56,6 @@
       </div>
     </div>
 
-    <!-- Pipeline Config Drawer -->
     <PipelineConfigDrawer
       :open="configDrawerOpen"
       :token="token"
@@ -68,10 +77,13 @@ import {
   AppstoreOutlined,
   BuildOutlined,
   DeploymentUnitOutlined,
+  ProfileOutlined,
   SettingOutlined,
 } from '@ant-design/icons-vue'
 import Header from './Header.vue'
 import PlanList from './PlanList.vue'
+import PlanReleaseUnitsPanel from './PlanReleaseUnitsPanel.vue'
+import PipelineAllListPanel from './PipelineAllListPanel.vue'
 import PipelineBoard from './PipelineBoard.vue'
 import PipelineConfigDrawer from './PipelineConfigDrawer.vue'
 import ReleaseUnitPage from './ReleaseUnitPage.vue'
@@ -83,7 +95,7 @@ const props = defineProps({
   currentUser: Object,
 })
 
-const emit = defineEmits(['logout'])
+defineEmits(['logout'])
 
 const configDrawerOpen = ref(false)
 const editingPipeline = ref(null)
@@ -92,30 +104,27 @@ const route = useRoute()
 const router = useRouter()
 
 const activePage = computed(() => {
+  if (route.name === 'pipeline-all') return 'pipeline-all'
+  if (route.name === 'iteration-plans') return 'iteration-plans'
   if (route.name === 'global-vars') return 'global-vars'
   if (route.name === 'release-units') return 'release-units'
   return 'workspace'
 })
 
-const contextBreadcrumbs = computed(() => {
-  switch (activePage.value) {
-    case 'global-vars':
-      return ['我的工作台', '全局变量']
-    case 'release-units':
-      return ['我的工作台', '发布单元']
-    default:
-      return ['我的工作台', '业务需求管理']
-  }
-})
-
 const setActivePage = (page) => {
+  if (page === 'iteration-plans') {
+    router.push('/plans')
+    return
+  }
   if (page === 'global-vars') {
     router.push('/global-vars')
-  } else if (page === 'release-units') {
-    router.push('/release-units')
-  } else {
-    router.push('/workspace')
+    return
   }
+  if (page === 'release-units') {
+    router.push('/release-units')
+    return
+  }
+  router.push('/workspace')
 }
 
 const userInitial = computed(() => {
@@ -147,7 +156,7 @@ const handleConfigSave = () => {
 
 .board-main {
   display: grid;
-  grid-template-columns: 62px 1fr;
+  grid-template-columns: 160px 1fr;
   min-height: calc(100vh - 56px);
   flex: 1;
 }
@@ -161,20 +170,44 @@ const handleConfigSave = () => {
 }
 
 .side-item {
-  width: 40px;
-  height: 40px;
+  width: 100%;
+  height: auto;
   border: 0;
   border-radius: 10px;
   background: transparent;
   color: #b6c5e5;
-  font-size: 18px;
   cursor: pointer;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 6px 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.side-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .side-item.active,
-.side-item:hover {
+.side-item:hover:not(:disabled) {
   background: #19325c;
   color: #f4f8ff;
+}
+
+.side-item svg {
+  font-size: 14px;
+  flex-shrink: 0;
+  min-width: 14px;
+}
+
+.side-label {
+  font-size: 14px;
+  line-height: 1.2;
+  flex: 1;
 }
 
 .board-content {
@@ -182,64 +215,52 @@ const handleConfigSave = () => {
   overflow: auto;
 }
 
-.context-strip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid #dde4f1;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+.plans-panel {
+  max-width: 296px;
 }
 
-.context-item {
-  color: #5f6f88;
-  font-size: 13px;
-}
-
-.context-item.active {
-  color: #1f56ba;
-  font-weight: 600;
-}
-
-.context-sep {
-  color: #9faecc;
-}
-
-.two-panel-layout {
+.iteration-layout {
   display: grid;
-  grid-template-columns: 360px 1fr;
-  gap: 14px;
-  height: 100%;
+  grid-template-columns: 296px 1fr;
+  gap: 18px;
+  min-width: 0;
+  min-height: calc(100vh - 92px);
+  align-items: stretch;
 }
 
-.panel-column {
-  min-height: 0;
+.iteration-left {
+  min-width: 0;
+  display: flex;
 }
 
-.plan-column {
-  overflow: hidden;
+.iteration-right {
+  min-width: 0;
 }
 
-.pipeline-column {
+.pipeline-layout {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 @media (max-width: 1400px) {
-  .two-panel-layout {
-    grid-template-columns: 1fr;
-  }
-
   .board-main {
     grid-template-columns: 1fr;
   }
 
   .sidebar {
     flex-direction: row;
-    justify-content: center;
+    justify-content: flex-start;
     padding: 8px;
+    gap: 8px;
+    overflow-x: auto;
+    border-bottom: 1px solid #e8e8e8;
+  }
+
+  .side-item {
+    width: auto;
+    min-width: 80px;
+    flex-shrink: 0;
   }
 }
 </style>
