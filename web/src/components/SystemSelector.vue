@@ -3,7 +3,7 @@
     <div class="system-selector">
       <span v-if="!compact" class="selector-label">当前系统</span>
       <a-select
-        v-model:value="currentSystemId"
+        :value="currentSystemId"
         class="system-select"
         placeholder="请选择系统"
         :loading="loadingSystems"
@@ -11,6 +11,7 @@
         option-label-prop="label"
         option-filter-prop="label"
         :filter-option="filterSystemOption"
+        @change="handleSystemChange"
       >
         <a-select-option
           v-for="system in sortedSystems"
@@ -37,11 +38,17 @@
             </button>
           </div>
         </a-select-option>
+        <a-select-option
+          value="__new_system__"
+          label="＋ 新建系统"
+          class="new-system-option"
+        >
+          <div class="new-system-option-content">
+            <PlusOutlined />
+            <span>新建系统</span>
+          </div>
+        </a-select-option>
       </a-select>
-      <a-button v-if="!compact" type="primary" class="new-system-btn" :loading="creating" @click="showCreateModal">
-        <PlusOutlined />
-        新建系统
-      </a-button>
     </div>
 
     <div v-if="selectedSystem && !compact" class="selected-system-card">
@@ -59,30 +66,15 @@
       </div>
       <a-tag color="blue">{{ selectedSystem.status || 'active' }}</a-tag>
     </div>
-    <a-modal
-      v-model:open="createModalOpen"
-      title="新建系统"
-      :confirm-loading="creating"
-      @ok="handleCreateSystem"
-    >
-      <a-form layout="vertical">
-        <a-form-item label="系统名称">
-          <a-input v-model:value="newSystem.name" placeholder="输入系统名称" />
-        </a-form-item>
-        <a-form-item label="系统描述">
-          <a-textarea v-model:value="newSystem.description" placeholder="系统描述（可选）" :rows="3" />
-        </a-form-item>
-      </a-form>
-    </a-modal>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { message } from 'ant-design-vue'
-import { PlusOutlined, StarFilled, StarOutlined } from '@ant-design/icons-vue'
+import { useRouter } from 'vue-router'
+import { StarFilled, StarOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import { useWorkspaceStore } from '../stores/workspace'
-import { createSystem, listSystems } from '../api/systems'
+import { listSystems } from '../api/systems'
 
 const props = defineProps({
   token: {
@@ -96,12 +88,9 @@ const props = defineProps({
 })
 
 const workspace = useWorkspaceStore()
+const router = useRouter()
 
 const loadingSystems = ref(false)
-const creating = ref(false)
-const createModalOpen = ref(false)
-const newSystem = ref({ name: '', description: '' })
-
 const currentSystemId = computed({
   get: () => workspace.selectedSystemId,
   set: (value) => workspace.selectSystem(value),
@@ -165,35 +154,19 @@ const loadSystems = async () => {
     const data = await listSystems(props.token)
     workspace.setSystems(data.items || [])
   } catch (err) {
-    message.error('系统列表加载失败: ' + (err?.message || '未知错误'))
+    console.warn('Failed to load systems:', err)
   } finally {
     loadingSystems.value = false
   }
 }
 
-const showCreateModal = () => {
-  createModalOpen.value = true
-  newSystem.value = { name: '', description: '' }
-}
-
-const handleCreateSystem = async () => {
-  if (!newSystem.value.name.trim()) {
-    message.warning('请输入系统名称')
+const handleSystemChange = (value) => {
+  if (value === '__new_system__') {
+    router.push('/systems/new')
+    currentSystemId.value = workspace.selectedSystemId
     return
   }
-
-  creating.value = true
-  try {
-    const created = await createSystem(props.token, newSystem.value)
-    await loadSystems()
-    workspace.selectSystem(created.ID || created.id)
-    createModalOpen.value = false
-    message.success('系统创建成功')
-  } catch (err) {
-    message.error('创建系统失败: ' + (err?.message || '未知错误'))
-  } finally {
-    creating.value = false
-  }
+  workspace.selectSystem(value)
 }
 
 onMounted(loadSystems)
@@ -214,47 +187,56 @@ onMounted(loadFavorites)
 .system-selector {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid #dce5f2;
-  background: #fff;
-  box-shadow: 0 2px 10px rgba(13, 32, 58, 0.06);
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  transition: all var(--transition-base);
+}
+
+.system-selector:hover {
+  border-color: var(--border-color-accent);
 }
 
 .system-selector-wrap.compact .system-selector {
-  padding: 0;
+  padding: 8px;
   border: none;
   background: transparent;
   box-shadow: none;
-  gap: 0;
+  gap: 10px;
 }
 
 .system-selector-wrap.compact .selector-label {
-  color: #d7e5ff;
+  color: var(--text-secondary);
   font-size: 14px;
   white-space: nowrap;
+  font-weight: 500;
 }
 
 .system-selector-wrap.compact :deep(.ant-select) {
-  width: 190px !important;
+  min-width: 240px;
 }
 
 .system-selector-wrap.compact :deep(.ant-select-selector) {
-  background: rgba(18, 41, 77, 0.85) !important;
-  border-color: rgba(127, 161, 219, 0.45) !important;
-  border-radius: 8px !important;
+  background: rgba(30, 41, 59, 0.8) !important;
+  border-color: var(--border-color-light) !important;
+  border-radius: var(--radius-md) !important;
+  color: var(--text-primary) !important;
 }
 
 .system-selector-wrap.compact :deep(.ant-select-arrow) {
-  color: #d8e8ff;
+  color: var(--text-tertiary) !important;
 }
 
 .system-selector-wrap.compact :deep(.ant-select-selection-item) {
-  color: #e7f1ff;
+  color: var(--text-primary) !important;
 }
 
-/* 选中态仅显示第一行（description），隐藏第二行和星标 */
+.system-selector-wrap.compact :deep(.ant-select-selection-placeholder) {
+  color: var(--text-muted) !important;
+}
+
 .system-selector-wrap.compact :deep(.ant-select-selection-item .option-secondary),
 .system-selector-wrap.compact :deep(.ant-select-selection-item .option-star-btn) {
   display: none;
@@ -267,6 +249,7 @@ onMounted(loadFavorites)
 .system-selector-wrap.compact :deep(.ant-select-selection-item .option-primary) {
   max-width: 140px;
   font-size: 14px;
+  color: var(--text-primary) !important;
 }
 
 .system-selector-wrap.compact :deep(.ant-select) {
@@ -277,19 +260,27 @@ onMounted(loadFavorites)
   font-size: 14px;
 }
 
-.system-selector-wrap.compact .new-system-btn {
-  height: 30px;
-  padding: 0 10px;
+.new-system-option {
+  color: var(--accent-primary);
+}
+
+.new-system-option-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
 }
 
 .selected-system-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-radius: 12px;
-  padding: 10px 12px;
-  border: 1px solid #cfe0ff;
-  background: linear-gradient(135deg, #1e67da 0%, #2a7aee 100%);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%);
+  backdrop-filter: blur(8px);
+  animation: slideUp 0.3s ease-out;
 }
 
 .system-card-main {
@@ -299,12 +290,12 @@ onMounted(loadFavorites)
 .system-name-line {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
 .system-name {
-  color: #ffffff;
+  color: var(--text-primary);
   font-weight: 600;
   font-size: 14px;
   max-width: 320px;
@@ -315,7 +306,7 @@ onMounted(loadFavorites)
 }
 
 .system-subline {
-  color: #dbe8ff;
+  color: var(--text-tertiary);
   font-size: 12px;
   min-width: 0;
   flex: 1;
@@ -325,21 +316,27 @@ onMounted(loadFavorites)
 }
 
 .star-btn {
-  color: #fff;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast);
+}
+
+.star-btn:hover {
+  color: var(--accent-warning);
 }
 
 .star-on {
-  color: #ffd666;
+  color: var(--accent-warning);
 }
 
 .star-off {
-  color: #dbe8ff;
+  color: var(--text-tertiary);
 }
 
 .selector-label {
-  color: #4f617c;
+  color: var(--text-secondary);
   font-size: 13px;
   min-width: 56px;
+  font-weight: 500;
 }
 
 .system-select {
@@ -371,7 +368,7 @@ onMounted(loadFavorites)
 .option-primary {
   font-size: 13px;
   font-weight: 600;
-  color: #1f2d3d;
+  color: var(--text-primary);
   max-width: 100%;
   min-width: 0;
   white-space: nowrap;
@@ -381,7 +378,7 @@ onMounted(loadFavorites)
 
 .option-secondary {
   font-size: 12px;
-  color: #7e8ca6;
+  color: var(--text-tertiary);
   min-width: 0;
   max-width: 100%;
   white-space: nowrap;
@@ -395,6 +392,11 @@ onMounted(loadFavorites)
   padding: 0;
   line-height: 1;
   cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.option-star-btn:hover {
+  transform: scale(1.2);
 }
 
 .option-star {
@@ -402,15 +404,11 @@ onMounted(loadFavorites)
 }
 
 .option-star-on {
-  color: #f8b800;
+  color: var(--accent-warning);
 }
 
 .option-star-off {
-  color: #b7c5dd;
-}
-
-.new-system-btn {
-  border-radius: 8px;
+  color: var(--text-muted);
 }
 
 @media (max-width: 900px) {

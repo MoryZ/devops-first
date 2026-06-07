@@ -21,6 +21,20 @@ func getUserID(c *gin.Context) (uint, bool) {
 	return userID, ok
 }
 
+func parsePositiveInt(s string) (int, error) {
+	if s == "" {
+		return 0, nil
+	}
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, nil
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, nil
+}
+
 // HandleListPipelineConfigs returns all pipeline configs for current user.
 func HandleListPipelineConfigs(c *gin.Context) {
 	userID, ok := getUserID(c)

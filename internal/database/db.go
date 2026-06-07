@@ -10,7 +10,7 @@ import (
 
 var DB *gorm.DB
 
-// InitDB initializes database connection and creates tables
+// InitDB initializes database connection with MySQL
 func InitDB(dsn string) error {
 	var err error
 	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
@@ -19,6 +19,25 @@ func InitDB(dsn string) error {
 	}
 
 	log.Println("Database connected successfully")
+	return nil
+}
+
+// InitDBWithDSN initializes database connection with specified driver
+func InitDBWithDSN(dsn string, dbType string) error {
+	var err error
+
+	switch dbType {
+	case "mysql":
+		DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	default:
+		return fmt.Errorf("unsupported database type: %s", dbType)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	log.Printf("Database connected successfully (type: %s)", dbType)
 	return nil
 }
 

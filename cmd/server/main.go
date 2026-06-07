@@ -25,6 +25,7 @@ type Config struct {
 	DockerPath string
 	GinMode    string
 	Proxies    []string
+	DBType     string
 	DBHost     string
 	DBPort     string
 	DBUser     string
@@ -40,6 +41,7 @@ func LoadConfig() Config {
 		DockerPath: getEnv("DOCKER_PATH", "docker"),
 		GinMode:    getEnv("GIN_MODE", gin.DebugMode),
 		Proxies:    splitCSV(getEnv("TRUSTED_PROXIES", "127.0.0.1,::1")),
+		DBType:     getEnv("DB_TYPE", "sqlite"),
 		DBHost:     getEnv("DB_HOST", "localhost"),
 		DBPort:     getEnv("DB_PORT", "3306"),
 		DBUser:     getEnv("DB_USER", "root"),
@@ -55,10 +57,22 @@ func main() {
 	gin.SetMode(cfg.GinMode)
 
 	// Initialize database
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName)
+	var dsn string
+	var err error
 
-	if err := database.InitDB(dsn); err != nil {
+	switch cfg.DBType {
+	case "mysql":
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName)
+		err = database.InitDBWithDSN(dsn, "mysql")
+	default:
+		dsn = "./data/devops.db"
+		// Ensure data directory exists
+		os.MkdirAll("./data", 0755)
+		err = database.InitDBWithDSN(dsn, "sqlite")
+	}
+
+	if err != nil {
 		log.Fatalf("database init failed: %v", err)
 	}
 
@@ -165,6 +179,8 @@ func main() {
 		protectedGroup.GET("/api/systems", handler.HandleListSystems)
 		protectedGroup.POST("/api/systems", handler.HandleCreateSystem)
 		protectedGroup.GET("/api/systems/:system_id", handler.HandleGetSystem)
+		protectedGroup.PUT("/api/systems/:system_id", handler.HandleUpdateSystem)
+		protectedGroup.DELETE("/api/systems/:system_id", handler.HandleDeleteSystem)
 		protectedGroup.GET("/api/systems/:system_id/plans", handler.HandleListPlans)
 		protectedGroup.POST("/api/systems/:system_id/plans", handler.HandleCreatePlan)
 		protectedGroup.GET("/api/systems/:system_id/pipelines", handler.HandleListPipelinesForSystem)

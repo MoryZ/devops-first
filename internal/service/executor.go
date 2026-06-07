@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 )
 
 var ErrDeploymentInProgress = errors.New("deployment already in progress for this project")
@@ -150,9 +149,6 @@ func (s *DeploymentService) runCommand(ctx context.Context, step commandStep, se
 		cmd.Env = append(cmd.Environ(), step.env...)
 	}
 
-	// Create a process group so all child processes can be terminated on cancel.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("stdout pipe: %w", err)
@@ -172,7 +168,7 @@ func (s *DeploymentService) runCommand(ctx context.Context, step commandStep, se
 		select {
 		case <-ctx.Done():
 			if cmd.Process != nil {
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				cmd.Process.Kill()
 			}
 		case <-childDone:
 		}
@@ -196,7 +192,7 @@ func (s *DeploymentService) runCommand(ctx context.Context, step commandStep, se
 					scanErr = err
 				})
 				if cmd.Process != nil {
-					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					cmd.Process.Kill()
 				}
 				return
 			}

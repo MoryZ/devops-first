@@ -2,7 +2,11 @@
   <div class="pipeline-board">
     <div class="board-toolbar">
       <div class="toolbar-title-wrap">
-        <h3 class="toolbar-title">流水线</h3>
+        <h3 class="toolbar-title">
+          <span class="title-icon">▶</span>
+          流水线
+        </h3>
+        <div class="title-underline"></div>
       </div>
 
       <div class="toolbar-actions">
@@ -12,7 +16,7 @@
             ref="searchInputRef"
             v-model="keyword"
             class="search-input"
-            placeholder="搜索流水线名"
+            placeholder="搜索流水线名..."
             @focus="searchFocus = true"
             @blur="handleSearchBlur"
           />
@@ -30,7 +34,9 @@
         </a-select>
 
         <a-dropdown>
-          <a-button><SortAscendingOutlined /></a-button>
+          <a-button class="icon-btn">
+            <SortAscendingOutlined />
+          </a-button>
           <template #overlay>
             <a-menu @click="handleSortChange">
               <a-menu-item key="exec_desc">按执行时间先后排序</a-menu-item>
@@ -38,27 +44,33 @@
             </a-menu>
           </template>
         </a-dropdown>
-        <a-button @click="filterOpen = true"><FilterOutlined /></a-button>
-        <a-button @click="goAllPipelines">
-          <UnorderedListOutlined />
-          查看全部流水线
+        <a-button class="icon-btn" @click="filterOpen = true">
+          <FilterOutlined />
         </a-button>
-        <a-button type="primary" @click="showCreateModal"><PlusOutlined /> 新建流水线</a-button>
+        <a-button class="secondary-btn" @click="goAllPipelines">
+          <UnorderedListOutlined />
+          查看全部
+        </a-button>
+        <a-button type="primary" class="primary-btn" @click="showCreateModal">
+          <PlusOutlined />
+          新建
+        </a-button>
       </div>
     </div>
 
-    <div class="version-line">
+    <div class="version-line" v-if="selectedPlanVersion !== '全部版本'">
+      <span class="version-label">当前版本</span>
       <span class="version-value">{{ selectedPlanVersion }}</span>
     </div>
 
     <div class="pipeline-list">
       <a-empty v-if="displayPipelines.length === 0" description="暂无流水线，请先创建或绑定发布单元" />
 
-      <article v-for="pipeline in displayPipelines" :key="pipeline.id" class="pipeline-card">
+      <article v-for="(pipeline, index) in displayPipelines" :key="pipeline.id" class="pipeline-card" :style="{ animationDelay: `${index * 0.05}s` }">
         <div class="pipeline-one-line">
           <span class="line-name" @click="openExecutionHistory(pipeline)">{{ getPipelineDisplayName(pipeline) }}</span>
           <span class="line-tags" v-if="(pipeline.tags || []).length > 0">
-            <a-tag v-for="tag in pipeline.tags || []" :key="`${pipeline.id}-${tag}`" color="blue">{{ tag }}</a-tag>
+            <a-tag v-for="tag in pipeline.tags || []" :key="`${pipeline.id}-${tag}`" color="blue" class="custom-tag">{{ tag }}</a-tag>
           </span>
           <template v-if="pipeline.last_execution_at">
             <span class="line-item"><span class="line-label">执行人员</span><span class="line-value">{{ pipeline.last_execution_user || '-' }}</span></span>
@@ -73,8 +85,8 @@
           </template>
 
           <span class="line-actions">
-            <a-button size="small" @click="handleRerunPipeline(pipeline)">{{ pipeline.last_execution_at ? '重新执行' : '执行' }}</a-button>
-            <a-button size="small" type="primary" ghost @click="openPipelineConfig(pipeline)">配置</a-button>
+            <a-button size="small" class="action-btn" @click="handleRerunPipeline(pipeline)">{{ pipeline.last_execution_at ? '重新执行' : '执行' }}</a-button>
+            <a-button size="small" type="primary" ghost class="action-btn-primary" @click="openPipelineConfig(pipeline)">配置</a-button>
           </span>
         </div>
 
@@ -86,7 +98,7 @@
                   <div class="stage-top">
                     <span class="stage-dot" :class="statusDotClass(stage.status)"></span>
                     <a-tooltip :title="getStageTooltipText(stage, pipeline)">
-                      <span>{{ stage.name }}</span>
+                      <span class="stage-name">{{ stage.name }}</span>
                     </a-tooltip>
                     <span class="stage-duration">{{ stage.duration || '-' }}</span>
                   </div>
@@ -106,7 +118,7 @@
                       <div class="stage-top">
                         <span class="stage-dot" :class="statusDotClass(stage.status)"></span>
                         <a-tooltip :title="getStageTooltipText(stage, pipeline)">
-                          <span>{{ stage.name }}</span>
+                          <span class="stage-name">{{ stage.name }}</span>
                         </a-tooltip>
                         <span class="stage-duration">{{ stage.duration || '-' }}</span>
                       </div>
@@ -237,7 +249,7 @@ const historyRows = ref([])
 const historyLoading = ref(false)
 const pipelineConfigMap = ref({})
 const releaseUnits = ref([])
-const runningBatchPollers = ref({}) // pipelineId -> intervalId
+const runningBatchPollers = ref({})
 const createModalOpen = ref(false)
 const creating = ref(false)
 const newPipeline = ref({
@@ -325,7 +337,6 @@ const normalizeStage = (stage, index, fallbackName) => ({
 
 const resolveStageStatus = (baseStatus, liveStages, stageName) => {
   if (liveStages && liveStages[stageName] !== undefined) return liveStages[stageName]
-  // Before execution starts, keep pending as neutral gray.
   if (baseStatus === 'pending') return 'idle'
   return baseStatus || 'idle'
 }
@@ -540,7 +551,7 @@ const updatePipelineTags = (pipelineId, values) => {
   const tagMap = loadTagMap()
   tagMap[pipelineId] = tags
   saveTagMap(tagMap)
-  pipelines.value = pipelines.value.map((pipeline) => (pipeline.id === pipelineId ? { ...pipeline, tags } : pipeline))
+  pipelines.value = pipelines.value.map((p) => (p.id === pipelineId ? { ...p, tags } : p))
 }
 
 const applyTagFilter = () => {
@@ -730,7 +741,6 @@ const loadLastExecutionTimes = async () => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
     const normalized = { ...raw }
 
-    // Backward compatibility for legacy stage names persisted by backend.
     if (normalized['触发源'] === undefined) {
       if (normalized['代码检出'] !== undefined) normalized['触发源'] = normalized['代码检出']
       if (normalized['source'] !== undefined) normalized['触发源'] = normalized['source']
@@ -878,11 +888,11 @@ onMounted(async () => {
     await loadPipelinesForPlan(workspace.selectedPlanId)
   } else if (workspace.selectedSystemId) {
     await loadPipelinesForSystem(workspace.selectedSystemId)
+  }
 
   onUnmounted(() => {
     Object.keys(runningBatchPollers.value).forEach((id) => stopBatchPoller(id))
   })
-  }
 })
 
 const loadPipelinesForPlan = async (planId) => {
@@ -1053,7 +1063,6 @@ const stopBatchPoller = (pipelineId) => {
 
 const startBatchPoller = (pipelineId, batchId) => {
   stopBatchPoller(pipelineId)
-  // Immediately set first executable node to running, others waiting.
   pipelines.value = pipelines.value.map((p) => {
     if (p.id !== pipelineId) return p
 
@@ -1140,7 +1149,7 @@ const openBPMDesigner = (pipeline) => {
 <style scoped>
 .pipeline-board {
   flex: 1;
-  padding: 14px;
+  padding: 0;
   overflow-y: auto;
 }
 
@@ -1148,20 +1157,64 @@ const openBPMDesigner = (pipeline) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 20px 24px;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  position: relative;
+  overflow: hidden;
+}
+
+.board-toolbar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+  opacity: 0.5;
 }
 
 .toolbar-title-wrap {
   flex-shrink: 0;
+  position: relative;
 }
 
 .toolbar-title {
-  margin: 0 8px 0 0;
-  color: #1a2f50;
-  font-size: 22px;
-  line-height: 1.2;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 24px;
+  line-height: 1.3;
   font-weight: 700;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  border-radius: 8px;
+  font-size: 12px;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+}
+
+.title-underline {
+  width: 40px;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent-primary), transparent);
+  border-radius: 2px;
+  margin-top: 6px;
 }
 
 .toolbar-actions {
@@ -1169,52 +1222,39 @@ const openBPMDesigner = (pipeline) => {
   justify-content: flex-end;
   align-items: center;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 10px;
   margin-left: auto;
 }
 
-.version-line {
+.search-shell {
+  width: 40px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color-light);
+  background: var(--bg-tertiary);
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 2px 0 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid #dde7f4;
-  background: #fff;
+  padding: 0 12px;
+  cursor: pointer;
+  transition: all var(--transition-base);
 }
 
-.version-label {
-  color: #7183a2;
-  font-size: 13px;
-}
-
-.version-value {
-  color: #21406d;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.search-shell {
-  width: 36px;
-  height: 34px;
-  border-radius: 17px;
-  border: 1px solid #d5dfed;
-  background: #fff;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  transition: width 0.2s ease;
+.search-shell:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-elevated);
 }
 
 .search-shell.active {
   width: 260px;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
 }
 
 .search-icon {
-  color: #71839d;
-  font-size: 13px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
 .search-input {
@@ -1223,8 +1263,10 @@ const openBPMDesigner = (pipeline) => {
   width: 0;
   opacity: 0;
   font-size: 13px;
-  color: #2a3e5c;
-  transition: all 0.2s ease;
+  color: var(--text-primary);
+  background: transparent;
+  transition: all var(--transition-base);
+  font-family: var(--font-display);
 }
 
 .search-shell.active .search-input {
@@ -1232,71 +1274,215 @@ const openBPMDesigner = (pipeline) => {
   opacity: 1;
 }
 
-.plan-select {
-  width: 190px;
+.search-input::placeholder {
+  color: var(--text-muted);
 }
 
-.sort-select {
-  width: 220px;
+.plan-select {
+  width: 180px;
+}
+
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color-light);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.icon-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--bg-elevated);
+  transform: translateY(-1px);
+}
+
+.secondary-btn {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color-light);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+  font-family: var(--font-display);
+}
+
+.secondary-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--bg-elevated);
+  transform: translateY(-1px);
+}
+
+.primary-btn {
+  height: 38px;
+  padding: 0 20px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-info));
+  border: none;
+  color: var(--bg-primary);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--transition-base);
+  font-family: var(--font-display);
+  box-shadow: 0 4px 15px rgba(0, 212, 255, 0.25);
+}
+
+.primary-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4);
+}
+
+.version-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  animation: slideUp 0.3s ease-out;
+}
+
+.version-label {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--font-mono);
+}
+
+.version-value {
+  color: var(--accent-primary);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-mono);
 }
 
 .pipeline-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .pipeline-card {
-  background: #fff;
-  border: 1px solid #dfe7f4;
-  border-radius: 12px;
-  padding: 12px;
-  box-shadow: 0 3px 12px rgba(20, 41, 68, 0.05);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-md);
+  transition: all var(--transition-base);
+  animation: slideUp 0.4s ease-out backwards;
+  position: relative;
+  overflow: hidden;
+}
+
+.pipeline-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.pipeline-card:hover {
+  border-color: var(--border-color-accent);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  transform: translateY(-2px);
+}
+
+.pipeline-card:hover::before {
+  opacity: 1;
 }
 
 .pipeline-one-line {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
   flex-wrap: wrap;
-  padding: 4px 0 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 14px;
 }
 
 .line-name {
-  color: #1f3d6a;
+  color: var(--text-primary);
   font-weight: 700;
-  font-size: 14px;
-  margin-right: 2px;
+  font-size: 15px;
+  margin-right: 4px;
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: all var(--transition-fast);
+  font-family: var(--font-display);
 }
 
 .line-name:hover {
-  color: #2d67d8;
-  text-decoration: underline;
+  color: var(--accent-primary);
+  text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
 }
 
 .line-tags {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+}
+
+.custom-tag {
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 2px 10px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent-info);
 }
 
 .line-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: #334a6f;
+  gap: 8px;
+  color: var(--text-secondary);
   font-size: 13px;
+  font-family: var(--font-mono);
 }
 
 .line-label {
-  color: #6d7f9c;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-display);
+  font-weight: 500;
 }
 
 .line-value {
-  color: #2a3f61;
+  color: var(--text-primary);
   font-weight: 600;
+}
+
+.commit-id {
+  font-family: var(--font-mono);
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
 }
 
 .line-actions {
@@ -1306,46 +1492,82 @@ const openBPMDesigner = (pipeline) => {
   margin-left: auto;
 }
 
-.commit-id {
-  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+.action-btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color-light);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  font-family: var(--font-display);
+}
+
+.action-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--bg-elevated);
+}
+
+.action-btn-primary {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-primary);
+  background: transparent;
+  color: var(--accent-primary);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  font-family: var(--font-display);
+}
+
+.action-btn-primary:hover {
+  background: rgba(0, 212, 255, 0.1);
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.2);
 }
 
 .stage-lane-wrap {
-  margin-top: 4px;
-  border-top: 1px dashed #e2eaf6;
-  padding-top: 10px;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-color);
 }
 
 .lane-caption {
   font-size: 12px;
-  color: #5f7294;
-  margin: 8px 0 6px;
+  color: var(--text-muted);
+  margin: 8px 0 10px;
   font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .stage-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .env-parallel-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   position: relative;
-  padding-left: 14px;
+  padding-left: 18px;
 }
 
 .env-parallel-block::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 18px;
-  bottom: 18px;
+  top: 20px;
+  bottom: 20px;
   width: 2px;
-  background: #9cafcd;
+  background: linear-gradient(180deg, var(--border-color-light), var(--accent-primary), var(--border-color-light));
+  border-radius: 1px;
 }
 
 .parallel-group-wrap {
@@ -1355,7 +1577,7 @@ const openBPMDesigner = (pipeline) => {
 
 .parallel-entry-link {
   align-self: center;
-  margin-right: 6px;
+  margin-right: 8px;
 }
 
 .env-row {
@@ -1363,29 +1585,41 @@ const openBPMDesigner = (pipeline) => {
 }
 
 .stage-col {
-  min-width: 165px;
+  min-width: 170px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   position: relative;
 }
 
 .env-parallel-block .stage-col::before {
   content: '';
   position: absolute;
-  left: -14px;
+  left: -18px;
   top: 50%;
-  width: 14px;
-  height: 1px;
-  background: #9cafcd;
+  width: 18px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--border-color-light));
 }
 
 .stage-card {
   width: 100%;
-  border: 1px solid #e3e7f1;
-  border-radius: 8px;
-  background: #fbfdff;
-  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  padding: 10px 12px;
+  transition: all var(--transition-base);
+  position: relative;
+}
+
+.stage-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
 }
 
 .stage-card.clickable {
@@ -1393,103 +1627,142 @@ const openBPMDesigner = (pipeline) => {
 }
 
 .stage-card.clickable:hover {
-  border-color: #b9c9e4;
-  box-shadow: 0 2px 8px rgba(30, 68, 120, 0.12);
+  border-color: var(--accent-primary);
+  background: var(--bg-elevated);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.stage-card.clickable:hover::after {
+  opacity: 1;
+  box-shadow: inset 0 0 20px rgba(0, 212, 255, 0.05);
 }
 
 .env-card {
-  background: #f7fbff;
+  background: rgba(0, 212, 255, 0.03);
+  border-color: rgba(0, 212, 255, 0.15);
 }
 
 .stage-top {
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: #2e3f57;
+  gap: 8px;
+  color: var(--text-primary);
   font-size: 13px;
+  font-weight: 500;
+}
+
+.stage-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .stage-duration {
   margin-left: auto;
-  color: #7d8ea8;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-family: var(--font-mono);
 }
 
 .stage-dot {
   width: 8px;
   height: 8px;
-  border-radius: 4px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
 }
 
 .dot-success {
-  background: #2fb65c;
+  background: var(--accent-success);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
 }
 
 .dot-failed {
-  background: #e24b4b;
+  background: var(--accent-danger);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
 }
 
 .dot-running {
-  background: #2e7cf2;
+  background: var(--accent-primary);
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 .dot-idle {
-  background: #b8c1d3;
+  background: var(--text-muted);
 }
 
 .dot-pending {
-  background: #faad14;
+  background: var(--accent-warning);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
 }
 
 .stage-progress {
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .progress-line {
   display: block;
-  width: 78%;
-  max-width: 116px;
-  height: 4px;
+  width: 100%;
+  max-width: 140px;
+  height: 3px;
   border-radius: 2px;
+  transition: all var(--transition-base);
 }
 
 .line-success {
-  background: #2fb65c;
+  background: linear-gradient(90deg, var(--accent-success), rgba(16, 185, 129, 0.3));
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
 }
 
 .line-failed {
-  background: #e24b4b;
+  background: linear-gradient(90deg, var(--accent-danger), rgba(239, 68, 68, 0.3));
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
 }
 
 .line-running {
-  background: #2e7cf2;
+  background: linear-gradient(90deg, var(--accent-primary), rgba(0, 212, 255, 0.3));
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.4);
+  animation: shimmer 2s linear infinite;
+  background-size: 200% 100%;
 }
 
 .line-idle {
-  background: #cfd5df;
+  background: var(--border-color-light);
 }
 
 .line-pending {
-  background: #ffe58f;
+  background: linear-gradient(90deg, var(--accent-warning), rgba(245, 158, 11, 0.3));
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
 }
 
 .stage-link {
-  width: 14px;
-  height: 1px;
-  background: #9cafcd;
+  width: 16px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--border-color-light), transparent);
+  flex-shrink: 0;
 }
 
 @media (max-width: 1280px) {
   .board-toolbar {
     flex-direction: column;
     align-items: flex-start;
+    padding: 16px;
   }
 
   .toolbar-actions {
     margin-left: 0;
+    width: 100%;
   }
 
   .line-actions {
     margin-left: 0;
+  }
+
+  .toolbar-title {
+    font-size: 20px;
   }
 }
 </style>

@@ -4,6 +4,9 @@ import LoginView from '../views/LoginView.vue'
 import PipelineExecutionsView from '../views/PipelineExecutionsView.vue'
 import PipelineBPMDesignerView from '../views/PipelineBPMDesignerView.vue'
 import PipelineExecutionStageDetailView from '../views/PipelineExecutionStageDetailView.vue'
+import SystemView from '../views/SystemView.vue'
+import NewSystemView from '../views/NewSystemView.vue'
+import SystemListView from '../views/SystemListView.vue'
 
 const routes = [
   {
@@ -38,6 +41,18 @@ const routes = [
     path: '/global-vars',
     name: 'global-vars',
     component: DashboardView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/systems/new',
+    name: 'new-system',
+    component: SystemView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/systems',
+    name: 'system-list',
+    component: SystemView,
     meta: { requiresAuth: true },
   },
   {

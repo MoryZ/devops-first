@@ -1,72 +1,98 @@
 <template>
-  <div class="stage-detail-view">
-    <a-card :bordered="false" class="head-card">
-      <div class="line-one">
-        <a class="link" @click="goPlanPipelines">流水线</a>
-        <span class="sep">/</span>
-        <a class="link" @click="goPipelineBatches">{{ pipelineName || pipelineId }}</a>
-        <span class="sep">/</span>
-        <span>#{{ displayBatchNumber }}(流水线批次ID) 执行记录</span>
+  <PageCard title="流水线详情" :subtitle="`批次 #${displayBatchNumber}`" icon="◆" bg="gradient">
+    <template #header>
+      <div class="page-header-content">
+        <div class="header-left">
+          <div class="breadcrumb">
+            <span class="breadcrumb-item" @click="goPlanPipelines">流水线</span>
+            <span class="breadcrumb-sep">/</span>
+            <span class="breadcrumb-item" @click="goPipelineBatches">{{ pipelineName || pipelineId }}</span>
+            <span class="breadcrumb-sep">/</span>
+            <span class="breadcrumb-current">#{{ displayBatchNumber }} 执行记录</span>
+          </div>
+          <div class="plan-badge" v-if="planVersion">
+            <span class="badge-icon">◈</span>
+            关联研发计划：{{ planVersion }}
+          </div>
+        </div>
       </div>
-      <div class="line-two">关联研发计划: {{ planVersion || '-' }}</div>
-    </a-card>
+    </template>
 
-    <a-card :bordered="false" class="middle-card">
-      <div class="middle-grid">
-        <div class="left-pane">
-          <div class="pane-title">BPM 节点</div>
-          <div class="nodes-container">
-            <div class="nodes-scroll-wrapper">
-              <div class="nodes-grid">
-                <div
-                  v-for="(column, colIdx) in stageColumns"
-                  :key="`col-${colIdx}`"
-                  class="node-column-wrapper"
-                >
-                  <div class="parallel-block">
-                    <div
-                      v-for="(node, nodeIdx) in column"
-                      :key="`${node.name}-${nodeIdx}`"
-                      class="node-card"
-                      :class="[`node-status-${node.status}`, { selected: selectedStageName === node.name }]"
-                      @click="selectNode(node)"
-                      @mouseenter="onNodeHover(node)"
-                      @mouseleave="onNodeLeave"
-                    >
-                      <div class="node-card-header">
-                        <span class="node-name">{{ node.name }}</span>
-                        <span class="node-status-badge">{{ getStatusLabel(node.status) }}</span>
+    <div class="detail-grid">
+      <a-card :bordered="false" class="detail-card nodes-card">
+        <div class="card-header">
+          <span class="card-icon">▶</span>
+          <h3 class="card-title">BPM 节点</h3>
+        </div>
+        <div class="nodes-container">
+          <div class="nodes-scroll-wrapper">
+            <div class="nodes-grid">
+              <div
+                v-for="(column, colIdx) in stageColumns"
+                :key="`col-${colIdx}`"
+                class="node-column-wrapper"
+              >
+                <div class="parallel-block">
+                  <div
+                    v-for="(node, nodeIdx) in column"
+                    :key="`${node.name}-${nodeIdx}`"
+                    class="node-card"
+                    :class="[`node-status-${node.status}`, { selected: selectedStageName === node.name }]"
+                    @click="selectNode(node)"
+                    @mouseenter="onNodeHover(node)"
+                    @mouseleave="onNodeLeave"
+                  >
+                    <div class="node-card-header">
+                      <span class="node-name">{{ node.name }}</span>
+                      <span class="node-status-badge">{{ getStatusLabel(node.status) }}</span>
+                    </div>
+                    <div class="node-card-body">
+                      <div class="node-duration">
+                        <ClockCircleOutlined />
+                        {{ getNodeDuration(node.name) }}
                       </div>
-                      <div class="node-card-body">
-                        <div class="node-duration">{{ getNodeDuration(node.name) }}</div>
-                      </div>
+                    </div>
 
-                      <!-- 悬停预览 -->
-                      <div v-if="hoveredNode === node.name || selectedStageName === node.name" class="node-preview-popup">
-                        <div class="preview-title">{{ node.name }}</div>
-                        <div v-for="(item, pidx) in (hoveredNode === node.name ? hoveredNodePreview : selectedNodePreview)" :key="`${pidx}-${item}`" class="preview-line">
-                          {{ item }}
-                        </div>
+                    <div v-if="hoveredNode === node.name || selectedStageName === node.name" class="node-preview-popup">
+                      <div class="preview-title">{{ node.name }}</div>
+                      <div v-for="(item, pidx) in (hoveredNode === node.name ? hoveredNodePreview : selectedNodePreview)" :key="pidx" class="preview-line">
+                        {{ item }}
                       </div>
                     </div>
                   </div>
-                  <!-- 连接线 -->
-                  <div v-if="colIdx < stageColumns.length - 1" class="node-connector"></div>
                 </div>
+                <div v-if="colIdx < stageColumns.length - 1" class="node-connector"></div>
               </div>
             </div>
           </div>
         </div>
+      </a-card>
 
-        <div class="right-pane">
-          <div class="pane-title">节点运行详情</div>
-          <div class="meta-row"><span class="k">操作人</span><span class="v">{{ operatorText }}</span></div>
-          <div class="meta-row"><span class="k">开始时间</span><span class="v">{{ startTime }}</span></div>
-          <div class="meta-row"><span class="k">运行时间</span><span class="v">{{ durationText }}</span></div>
-          <div class="meta-row"><span class="k">源码地址</span><span class="v break">{{ repoUrl || '-' }}</span></div>
+      <a-card :bordered="false" class="detail-card meta-card">
+        <div class="card-header">
+          <span class="card-icon">◈</span>
+          <h3 class="card-title">节点运行详情</h3>
+        </div>
+        <div class="meta-grid">
           <div class="meta-row">
-            <span class="k">提交记录ID</span>
-            <span class="v">
+            <span class="meta-label">操作人</span>
+            <span class="meta-value">{{ operatorText }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">开始时间</span>
+            <span class="meta-value">{{ startTime }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">运行时间</span>
+            <span class="meta-value">{{ durationText }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">源码地址</span>
+            <span class="meta-value break">{{ repoUrl || '-' }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-label">提交记录ID</span>
+            <span class="meta-value">
               <a-tooltip v-if="commitId" :title="commitId">
                 <span class="commit-short">{{ commitId.slice(0, 9) }}</span>
               </a-tooltip>
@@ -75,44 +101,73 @@
             </span>
           </div>
         </div>
-      </div>
-    </a-card>
+      </a-card>
+    </div>
 
-    <a-card :bordered="false" class="logs-card" :title="`实时日志 · ${selectedStageName || stageName || stageKey}`">
-      <div class="log-toolbar">
-        <a-button size="small" @click="loadAll">刷新</a-button>
-        <a-button size="small" @click="scrollToBottom">下拉滚动</a-button>
-        <a-button size="small" @click="toggleFullscreen">{{ isFullscreen ? '退出全屏' : '全屏' }}</a-button>
-        <a-button size="small" @click="downloadLogs">下载</a-button>
+    <a-card :bordered="false" class="detail-card logs-card">
+      <div class="card-header">
+        <span class="card-icon">▶</span>
+        <h3 class="card-title">
+          实时日志
+          <span class="card-subtitle">· {{ selectedStageName || stageName || stageKey }}</span>
+        </h3>
+        <div class="log-toolbar">
+          <a-button size="small" class="toolbar-btn" @click="loadAll">
+            <ReloadOutlined />
+            刷新
+          </a-button>
+          <a-button size="small" class="toolbar-btn" @click="scrollToBottom">
+            <ArrowDownOutlined />
+            下拉滚动
+          </a-button>
+          <a-button size="small" class="toolbar-btn" @click="toggleFullscreen">
+            <FullscreenOutlined />
+            {{ isFullscreen ? '退出全屏' : '全屏' }}
+          </a-button>
+          <a-button size="small" class="toolbar-btn" @click="downloadLogs">
+            <DownloadOutlined />
+            下载
+          </a-button>
+        </div>
       </div>
       <pre ref="logsRef" class="logs-view">{{ logsText }}</pre>
     </a-card>
 
-    <a-modal v-model:open="commitModalOpen" title="提交记录" width="70vw" :footer="null">
+    <a-modal v-model:open="commitModalOpen" title="提交记录" width="72vw" :footer="null">
       <a-table
         :data-source="commitRows"
         :columns="commitColumns"
         :loading="commitLoading"
         row-key="code_version"
         :pagination="{ pageSize: 8, showSizeChanger: false }"
+        class="commit-table"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'code_version'">
             <a-tooltip :title="record.code_version">
-              <span>{{ String(record.code_version || '').slice(0, 16) }}...</span>
+              <span class="commit-id-cell">{{ String(record.code_version || '').slice(0, 16) }}...</span>
             </a-tooltip>
           </template>
         </template>
       </a-table>
     </a-modal>
-  </div>
+  </PageCard>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import {
+  ArrowDownOutlined,
+  ClockCircleOutlined,
+  CodeOutlined,
+  DownloadOutlined,
+  FullscreenOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons-vue'
 import { getBatchStatus, listExecutionCommits, listExecutionLogs } from '../api/executions'
 import { getPipelineConfig } from '../api/pipelines'
+import PageCard from '../components/PageCard.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -158,7 +213,6 @@ const commitColumns = [
 ]
 
 const operatorText = computed(() => operator.value || '-')
-const pipelineTypeName = computed(() => `${triggeredBy.value || 'manual'}-${pipelineName.value || pipelineId.value}`)
 
 const formatDateTime = (value) => {
   if (!value) return '-'
@@ -337,14 +391,12 @@ const getStatusLabel = (status) => {
     'error': '失败',
     'running': '运行中',
     'pending': '待执行',
-    'idle': '未执行'
+    'idle': '未执行',
   }
   return labels[status] || '未执行'
 }
 
 const getNodeDuration = (nodeName) => {
-  // 获取该节点的执行时间（秒），可以从日志中解析或从批次信息中获取
-  // 暂时返回示例数据
   const durations = {
     '触发源': '2s',
     '代码检出': '3s',
@@ -352,7 +404,7 @@ const getNodeDuration = (nodeName) => {
     '单元测试': '0s',
     '打包': '0s',
     '部署开发': '0s',
-    '部署测试': '0s'
+    '部署测试': '0s',
   }
   return durations[nodeName] || '-'
 }
@@ -431,130 +483,111 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.stage-detail-view {
-  min-height: 100vh;
-  background: #f3f5f9;
-  padding: 18px;
-}
-
-.head-card,
-.middle-card,
-.logs-card {
-  border-radius: 12px;
-  box-shadow: 0 8px 22px rgba(17, 36, 64, 0.08);
-  margin-bottom: 14px;
-}
-
-.line-one {
+.breadcrumb {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 16px;
-  color: #1f2f46;
-  font-weight: 600;
   flex-wrap: wrap;
 }
 
-.link {
-  color: #2d67d8;
+.breadcrumb-item {
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--transition-fast);
 }
 
-.sep {
-  color: #8ca0bf;
+.breadcrumb-item:hover {
+  color: var(--accent-primary);
 }
 
-.line-two {
+.breadcrumb-sep {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.breadcrumb-current {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.plan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 8px;
-  color: #536b8f;
-  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--accent-primary);
+  font-size: 13px;
+  font-weight: 500;
+  width: fit-content;
 }
 
-.middle-grid {
+.badge-icon {
+  font-size: 12px;
+}
+
+.detail-grid {
   display: grid;
   grid-template-columns: 1.8fr 0.8fr;
-  gap: 16px;
+  gap: 20px;
+  margin-bottom: 20px;
 }
 
-.pane-title {
+.detail-card {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+  transition: all var(--transition-base);
+}
+
+.detail-card:hover {
+  border-color: var(--border-color-accent);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  border-radius: 7px;
+  font-size: 11px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.card-title {
+  font-family: var(--font-display);
   font-size: 15px;
   font-weight: 700;
-  color: #24364f;
-  margin-bottom: 10px;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: 0.02em;
 }
 
-.nodes-wrap {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
-  padding: 8px 0;
-}
-
-.node-item {
-  border: 2px solid #e2e9f5;
-  border-radius: 10px;
-  padding: 12px;
-  background: #fbfdff;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.node-item:hover {
-  border-color: #b3c7e8;
-  box-shadow: 0 4px 12px rgba(45, 103, 216, 0.1);
-}
-
-.node-item .dot {
-  display: none;
-}
-
-.node-item.node-success {
-  border-color: #2fb65c;
-  background: #f0f9f5;
-}
-
-.node-item.node-failed {
-  border-color: #e24b4b;
-  background: #fef5f5;
-}
-
-.node-item.node-running {
-  border-color: #2e7cf2;
-  background: #eef5ff;
-}
-
-.node-item.node-pending {
-  border-color: #faad14;
-  background: #fffbeb;
-}
-
-.node-item.active {
-  border-color: #2e7cf2;
-  border-width: 3px;
-  box-shadow: 0 4px 16px rgba(45, 103, 216, 0.25);
-  background: #eef5ff;
-}
-
-.node-preview {
-  border: 1px solid #e2e9f5;
-  border-radius: 8px;
-  background: #fbfdff;
-  padding: 10px;
-}
-
-.preview-title {
-  color: #29456f;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.preview-line {
-  color: #586f91;
-  font-size: 12px;
-  line-height: 1.7;
+.card-subtitle {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  margin-left: 4px;
 }
 
 .nodes-container {
@@ -579,18 +612,18 @@ onUnmounted(() => {
 }
 
 .nodes-scroll-wrapper::-webkit-scrollbar-thumb {
-  background: #d0d7e1;
+  background: var(--border-color-light);
   border-radius: 3px;
 }
 
 .nodes-scroll-wrapper::-webkit-scrollbar-thumb:hover {
-  background: #b0b8c8;
+  background: var(--text-muted);
 }
 
 .nodes-grid {
   display: flex;
   gap: 0;
-  padding: 8px 0;
+  padding: 4px 0;
   min-width: min-content;
   align-items: stretch;
 }
@@ -603,83 +636,76 @@ onUnmounted(() => {
 .parallel-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .node-card {
-  border: 2px solid #e2e9f5;
-  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   padding: 12px;
-  background: #fbfdff;
+  background: var(--bg-tertiary);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all var(--transition-base);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-width: 140px;
+  min-width: 150px;
   position: relative;
   flex-shrink: 0;
 }
 
+.node-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
+}
+
 .node-card:hover {
-  border-color: #b3c7e8;
-  box-shadow: 0 4px 12px rgba(45, 103, 216, 0.1);
+  border-color: var(--accent-primary);
+  background: var(--bg-elevated);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.node-card:hover::after {
+  opacity: 1;
+  box-shadow: inset 0 0 20px rgba(0, 212, 255, 0.05);
 }
 
 .node-card.selected {
-  border-color: #2e7cf2;
-  border-width: 3px;
-  box-shadow: 0 4px 16px rgba(45, 103, 216, 0.25);
-  background: #eef5ff;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2), var(--shadow-lg);
+  background: rgba(0, 212, 255, 0.08);
 }
 
 .node-card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 6px;
+  gap: 8px;
 }
 
 .node-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  color: #24364f;
+  color: var(--text-primary);
   flex: 1;
   word-break: break-word;
+  line-height: 1.4;
 }
 
 .node-status-badge {
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
   white-space: nowrap;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-}
-
-.node-status-success .node-status-badge {
-  background: #d6f5e6;
-  color: #1d6e3f;
-}
-
-.node-status-failed .node-status-badge {
-  background: #fce2e2;
-  color: #7a1f1f;
-}
-
-.node-status-running .node-status-badge {
-  background: #dce9fc;
-  color: #1d3f7a;
-}
-
-.node-status-pending .node-status-badge {
-  background: #fff9e6;
-  color: #7a5a1f;
-}
-
-.node-status-idle .node-status-badge {
-  background: #f0f2f5;
-  color: #595959;
 }
 
 .node-card-body {
@@ -691,13 +717,21 @@ onUnmounted(() => {
 .node-duration {
   font-size: 13px;
   font-weight: 500;
-  color: #536b8f;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.node-duration svg {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .node-connector {
   width: 20px;
   height: 2px;
-  background: #d0d7e1;
+  background: linear-gradient(90deg, var(--border-color-light), transparent);
   flex-shrink: 0;
   position: relative;
 }
@@ -709,8 +743,54 @@ onUnmounted(() => {
   top: -4px;
   width: 8px;
   height: 8px;
-  background: #d0d7e1;
+  background: var(--border-color-light);
   border-radius: 50%;
+}
+
+.node-status-success {
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.node-status-success .node-status-badge {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-success);
+}
+
+.node-status-failed {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.node-status-failed .node-status-badge {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--accent-danger);
+}
+
+.node-status-running {
+  border-color: rgba(0, 212, 255, 0.4);
+  animation: pulse-border 2s ease-in-out infinite;
+}
+
+.node-status-running .node-status-badge {
+  background: rgba(0, 212, 255, 0.15);
+  color: var(--accent-primary);
+}
+
+.node-status-pending {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.node-status-pending .node-status-badge {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-warning);
+}
+
+.node-status-idle {
+  border-color: var(--border-color);
+}
+
+.node-status-idle .node-status-badge {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
 }
 
 .node-preview-popup {
@@ -719,46 +799,61 @@ onUnmounted(() => {
   bottom: 100%;
   transform: translateX(-50%);
   margin-bottom: 8px;
-  background: #ffffff;
-  border: 1px solid #e2e9f5;
-  border-radius: 8px;
-  padding: 10px;
-  min-width: 150px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color-accent);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  min-width: 160px;
+  max-width: 260px;
+  box-shadow: var(--shadow-lg);
   z-index: 100;
-  white-space: normal;
-  max-width: 250px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
 .preview-title {
-  color: #29456f;
+  color: var(--text-primary);
   font-weight: 600;
   font-size: 13px;
+  margin-bottom: 2px;
 }
 
 .preview-line {
-  color: #586f91;
+  color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.6;
+  word-break: break-all;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .meta-row {
   display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 8px;
-  margin-bottom: 8px;
+  grid-template-columns: 100px 1fr;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--border-color);
 }
 
-.k {
-  color: #6e7f99;
+.meta-row:last-child {
+  border-bottom: none;
 }
 
-.v {
-  color: #24364f;
+.meta-label {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.meta-value {
+  color: var(--text-primary);
   font-weight: 600;
+  font-size: 13px;
 }
 
 .break {
@@ -766,13 +861,25 @@ onUnmounted(() => {
 }
 
 .commit-short {
-  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: var(--font-mono);
   margin-right: 8px;
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
 }
 
 .commit-link {
+  color: var(--accent-primary);
+  cursor: pointer;
   margin-left: 8px;
-  color: #2d67d8;
+  font-size: 13px;
+  transition: all var(--transition-fast);
+}
+
+.commit-link:hover {
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.4);
 }
 
 .log-toolbar {
@@ -780,7 +887,31 @@ onUnmounted(() => {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+.toolbar-btn {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color-light);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-family: var(--font-display);
+  transition: all var(--transition-fast);
+}
+
+.toolbar-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--bg-elevated);
+}
+
+.logs-card {
+  margin-top: 0;
 }
 
 .logs-view {
@@ -789,16 +920,44 @@ onUnmounted(() => {
   word-break: break-word;
   max-height: 58vh;
   overflow: auto;
-  background: #0f1722;
+  background: #0a0f1a;
   color: #d6e2ff;
-  padding: 12px;
-  border-radius: 8px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  border: 1px solid var(--border-color);
+}
+
+.commit-table {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.commit-id-cell {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(0, 212, 255, 0.1);
+  }
 }
 
 @media (max-width: 1180px) {
-  .middle-grid {
+  .detail-grid {
     grid-template-columns: 1fr;
   }
+
+  .meta-grid {
+    grid-template-columns: 1fr;
+  }
+
   .meta-row {
     grid-template-columns: 1fr;
   }

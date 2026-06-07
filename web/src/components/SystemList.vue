@@ -2,7 +2,7 @@
   <div class="system-list-panel">
     <div class="panel-header">
       <span class="panel-title">系统列表</span>
-      <a-button type="primary" @click="showCreateModal"><PlusOutlined /> 新建系统</a-button>
+      <a-button type="primary" @click="goNewSystem"><PlusOutlined /> 新建系统</a-button>
     </div>
     <div class="system-list">
       <a-card
@@ -20,26 +20,15 @@
         </div>
       </a-card>
     </div>
-
-    <!-- Create System Modal -->
-    <a-modal v-model:open="createModalOpen" title="新建系统" @ok="handleCreateSystem">
-      <a-form layout="vertical">
-        <a-form-item label="系统名称">
-          <a-input v-model:value="newSystem.name" placeholder="输入系统名称" />
-        </a-form-item>
-        <a-form-item label="系统描述">
-          <a-textarea v-model:value="newSystem.description" placeholder="系统描述（可选）" :rows="3" />
-        </a-form-item>
-      </a-form>
-    </a-modal>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { useRouter } from 'vue-router'
 import { PlusOutlined } from '@ant-design/icons-vue'
-import { createSystem, listSystems } from '../api/systems'
+import { listSystems } from '../api/systems'
+import { useWorkspaceStore } from '../stores/workspace'
 
 const props = defineProps({
   token: String,
@@ -47,13 +36,11 @@ const props = defineProps({
 
 const emit = defineEmits(['select-system'])
 
+const router = useRouter()
+const workspace = useWorkspaceStore()
+
 const systems = ref([])
 const selectedSystemId = ref('')
-const createModalOpen = ref(false)
-const newSystem = ref({
-  name: '',
-  description: '',
-})
 
 const statusColor = {
   active: 'green',
@@ -82,25 +69,8 @@ const selectSystem = (system) => {
   emit('select-system', system)
 }
 
-const showCreateModal = () => {
-  createModalOpen.value = true
-  newSystem.value = { name: '', description: '' }
-}
-
-const handleCreateSystem = async () => {
-  if (!newSystem.value.name) {
-    message.warning('请输入系统名称')
-    return
-  }
-
-  try {
-    await createSystem(props.token, newSystem.value)
-    message.success('系统创建成功')
-    createModalOpen.value = false
-    await loadSystems()
-  } catch (err) {
-    message.error('创建失败: ' + (err?.message || '未知错误'))
-  }
+const goNewSystem = () => {
+  router.push('/systems/new')
 }
 </script>
 

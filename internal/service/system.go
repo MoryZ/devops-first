@@ -37,6 +37,62 @@ func ListSystems(userID uint) ([]model.System, error) {
 	return systems, nil
 }
 
+// ListSystemsPaginated returns paginated systems with optional keyword filter
+func ListSystemsPaginated(userID uint, page, pageSize int, keyword string) (int64, []model.System, error) {
+	db := database.GetDB().Model(&model.System{}).Where("user_id = ?", userID)
+	if keyword != "" {
+		search := "%" + keyword + "%"
+		db = db.Where("name ILIKE ? OR description ILIKE ?", search, search)
+	}
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return 0, nil, fmt.Errorf("count systems failed: %w", err)
+	}
+	offset := (page - 1) * pageSize
+	var systems []model.System
+	if err := db.Order("updated_at DESC").Offset(offset).Limit(pageSize).Find(&systems).Error; err != nil {
+		return 0, nil, fmt.Errorf("list systems failed: %w", err)
+	}
+	return total, systems, nil
+}
+
+// UpdateSystem updates system fields
+func UpdateSystem(userID uint, systemID string, name, description, status *string) (*model.System, error) {
+	var system model.System
+	if err := database.GetDB().Where("id = ? AND user_id = ?", systemID, userID).First(&system).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("system not found")
+		}
+		return nil, fmt.Errorf("find system failed: %w", err)
+	}
+	if name != nil {
+		system.Name = *name
+	}
+	if description != nil {
+		system.Description = *description
+	}
+	if status != nil {
+		system.Status = *status
+	}
+	system.UpdatedAt = time.Now().UnixMilli()
+	if err := database.GetDB().Save(&system).Error; err != nil {
+		return nil, fmt.Errorf("update system failed: %w", err)
+	}
+	return &system, nil
+}
+
+// DeleteSystem deletes a system (cascades to plans and pipelines via DB cascade)
+func DeleteSystem(userID uint, systemID string) error {
+	result := database.GetDB().Where("id = ? AND user_id = ?", systemID, userID).Delete(&model.System{})
+	if result.Error != nil {
+		return fmt.Errorf("delete system failed: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("system not found")
+	}
+	return nil
+}
+
 // GetSystem gets a system by ID (checks ownership)
 func GetSystem(userID uint, systemID string) (*model.System, error) {
 	var system model.System

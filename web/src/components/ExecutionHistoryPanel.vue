@@ -1,72 +1,81 @@
 <template>
-  <a-card class="history-card" :bordered="false">
-    <div class="history-toolbar">
-      <div class="history-tabs">
-        <span class="tab-item active">执行记录</span>
-        <span class="tab-item">修改历史</span>
-      </div>
-      <div class="filter-group">
-        <a-range-picker
-          v-model:value="dateRange"
-          format="YYYY-MM-DD"
-          :placeholder="['开始日期', '结束日期']"
-          size="small"
-          style="width: 240px"
-          @change="applyFilters"
-        />
-        <a-select
-          v-model:value="selectedOperator"
-          placeholder="全部"
-          size="small"
-          style="width: 140px"
-          allow-clear
-          @change="applyFilters"
-        >
-          <a-select-option value="">全部</a-select-option>
-          <a-select-option v-for="name in operatorOptions" :key="name" :value="name">{{ name }}</a-select-option>
-        </a-select>
-        <a-button size="small" @click="loadHistory">刷新</a-button>
-      </div>
-    </div>
+  <PageCard title="执行历史" subtitle="查看流水线部署记录和节点状态" icon="⏱">
+    <template #actions>
+      <a-range-picker
+        v-model:value="dateRange"
+        format="YYYY-MM-DD"
+        :placeholder="['开始日期', '结束日期']"
+        size="small"
+        class="filter-picker"
+        @change="applyFilters"
+      />
+      <a-select
+        v-model:value="selectedOperator"
+        placeholder="全部操作人"
+        size="small"
+        class="filter-select"
+        allow-clear
+        @change="applyFilters"
+      >
+        <a-select-option value="">全部</a-select-option>
+        <a-select-option v-for="name in operatorOptions" :key="name" :value="name">{{ name }}</a-select-option>
+      </a-select>
+      <a-button size="small" class="refresh-btn" @click="loadHistory">
+        <RedoOutlined />
+        刷新
+      </a-button>
+    </template>
 
-    <a-spin :spinning="loading">
+    <a-spin :spinning="loading" class="page-spin">
       <div v-if="rows.length" class="history-list">
         <div v-for="record in rows" :key="record.id" class="history-item">
           <div class="history-item-head">
             <div class="batch-main">
               <div class="batch-info-row">
                 <div class="info-item batch-no-item">
-                  <a class="batch-no-link" @click="openPipelineDetail(record)">#{{ record.batch_number || '-' }}</a>
+                  <span class="batch-no-link" @click="openPipelineDetail(record)">
+                    <span class="batch-hash">#</span>{{ record.batch_number || '-' }}
+                  </span>
                 </div>
                 <div class="info-item">
+                  <UserOutlined class="info-icon" />
                   <span class="info-value">{{ getOperator(record) }}</span>
                 </div>
                 <div class="info-item">
+                  <ClockCircleOutlined class="info-icon" />
                   <span class="info-value">{{ formatDateTime(record.started_at || record.created_at) }}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-value">{{ pipelineBranch || '-' }}</span>
                 </div>
                 <div class="info-item">
-                  <span class="info-value">{{ shortCommit(record.commit_id) }}</span>
+                  <CodeOutlined class="info-icon" />
+                  <span class="info-value commit-hash">{{ shortCommit(record.commit_id) }}</span>
                 </div>
               </div>
             </div>
             <div class="batch-actions">
-              <a-button type="link" size="small" @click="viewLogs(record.id)">查看日志</a-button>
+              <a-button type="text" size="small" class="action-link" @click="viewLogs(record.id)">
+                <EyeOutlined /> 查看日志
+              </a-button>
               <a-button
                 v-if="record.status === 'running' || record.status === 'pending'"
-                type="link"
+                type="text"
                 size="small"
-                danger
+                class="action-link danger"
                 @click="cancelBatch(record.id)"
-              >中断</a-button>
+              >
+                <StopOutlined /> 中断
+              </a-button>
               <a-button
-                v-if="record.status === 'failed' || record.status === 'cancelled' || record.status === 'success'"
-                type="link"
+                v-if="['failed', 'cancelled', 'success'].includes(record.status)"
+                type="text"
                 size="small"
+                class="action-link primary"
                 @click="openRerunModal(record.id)"
-              >重跑节点</a-button>
+              >
+                <ReloadOutlined /> 重跑节点
+              </a-button>
             </div>
           </div>
 
@@ -90,8 +99,11 @@
                       <span class="node-status-badge">{{ getStatusLabel(node.status) }}</span>
                     </div>
                     <div class="node-card-body">
-                      <div class="node-duration">{{ formatDuration(record.total_duration, node.status) }}</div>
-                      <div class="node-hint">点击查看节点详情</div>
+                      <div class="node-duration">
+                        <ClockCircleOutlined />
+                        {{ formatDuration(record.total_duration, node.status) }}
+                      </div>
+                      <div class="node-hint">点击查看详情</div>
                     </div>
                   </div>
                 </div>
@@ -102,10 +114,10 @@
         </div>
       </div>
 
-      <a-empty v-else description="暂无执行记录" />
+      <a-empty v-else description="暂无执行记录" class="page-empty" />
     </a-spin>
 
-    <a-modal v-model:open="logsOpen" title="执行日志" width="70vw" :footer="null">
+    <a-modal v-model:open="logsOpen" title="执行日志" width="72vw" :footer="null">
       <pre class="logs-view">{{ logsText }}</pre>
     </a-modal>
 
@@ -116,15 +128,25 @@
         </a-form-item>
       </a-form>
     </a-modal>
-  </a-card>
+  </PageCard>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import {
+  EyeOutlined,
+  StopOutlined,
+  ReloadOutlined,
+  ClockCircleOutlined,
+  UserOutlined,
+  CodeOutlined,
+  RedoOutlined,
+} from '@ant-design/icons-vue'
 import { getPipelineConfig, listPipelineExecutions } from '../api/pipelines'
 import { cancelExecutionBatch, listExecutionLogs, rerunExecutionNode } from '../api/executions'
+import PageCard from './PageCard.vue'
 
 const props = defineProps({
   token: {
@@ -296,20 +318,6 @@ const applyFilters = () => {
   rows.value = allRows
 }
 
-const buildStageNodes = (stagesMap) => {
-  return buildStageColumns(stagesMap).flat().map((stage) => {
-      return {
-        name: stage.name,
-        status: stage.status,
-      }
-    })
-}
-
-const getBatchStageNodes = (record) => {
-  const stagesMap = normalizeLatestStagesMap(JSON.parse(record.stages_status_json || '{}'))
-  return buildStageNodes(stagesMap)
-}
-
 const loadHistory = async () => {
   if (!props.pipelineId || !props.token) {
     rows.value = []
@@ -380,7 +388,7 @@ const confirmRerunNode = async () => {
 
 const openStageDetail = (record, node) => {
   router.push({
-    path: `/pipelines/${props.pipelineId}/executions/${record.id}/stage/${nodeNameToStageKey(node.name)}`,
+    path: `/pipelines/${props.pipelineId}/executions/${record.id}/stage/${encodeURIComponent(nodeNameToStageKey(node.name))}`,
     query: {
       name: String(route.query.name || record.pipeline_name || ''),
       plan_version: String(route.query.plan_version || ''),
@@ -411,55 +419,77 @@ watch(
 </script>
 
 <style scoped>
-.history-card {
-  border-radius: 12px;
-  margin-top: 14px;
-  box-shadow: 0 8px 22px rgba(17, 36, 64, 0.08);
+.page-spin {
+  display: block;
 }
 
-.history-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
+.filter-picker {
+  width: 220px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border-color: var(--border-color-light);
 }
 
-.history-tabs {
+.filter-select {
+  width: 160px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border-color: var(--border-color-light);
+}
+
+.refresh-btn {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color-light);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  height: 30px;
   display: inline-flex;
   align-items: center;
-  gap: 16px;
+  gap: 6px;
 }
 
-.tab-item {
-  font-size: 16px;
-  font-weight: 600;
-  color: #6f819d;
-}
-
-.tab-item.active {
-  color: #1f2f46;
-}
-
-.filter-group {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
+.refresh-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--bg-elevated);
 }
 
 .history-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .history-item {
-  border: 1px solid #e6ebf5;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
-  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  padding: 18px;
+  transition: all var(--transition-base);
+  animation: slideUp 0.4s ease-out backwards;
+  position: relative;
+  overflow: hidden;
+}
+
+.history-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.history-item:hover {
+  border-color: var(--border-color-accent);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+.history-item:hover::before {
+  opacity: 1;
 }
 
 .history-item-head {
@@ -467,7 +497,9 @@ watch(
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border-color);
 }
 
 .batch-main {
@@ -480,10 +512,10 @@ watch(
 .batch-info-row {
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 18px;
   flex-wrap: wrap;
-  color: #60738f;
-  font-size: 14px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .info-item {
@@ -493,33 +525,86 @@ watch(
   min-width: 0;
 }
 
+.info-icon {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .batch-no-item {
   gap: 0;
 }
 
 .batch-no-link {
-  color: #24364f;
+  color: var(--text-primary);
   font-weight: 700;
+  font-size: 15px;
   text-decoration: none;
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.batch-hash {
+  color: var(--accent-primary);
 }
 
 .batch-no-link:hover {
-  color: #2d67d8;
+  color: var(--accent-primary);
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
 }
 
 .info-value {
-  color: #24364f;
+  color: var(--text-primary);
   font-weight: 600;
   white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.commit-hash {
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
 }
 
 .batch-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
+}
+
+.action-link {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.action-link:hover {
+  color: var(--accent-primary);
+}
+
+.action-link.danger {
+  color: var(--accent-danger);
+}
+
+.action-link.danger:hover {
+  color: #f87171;
+}
+
+.action-link.primary {
+  color: var(--accent-info);
+}
+
+.action-link.primary:hover {
+  color: #60a5fa;
 }
 
 .nodes-scroll-wrapper {
@@ -527,7 +612,7 @@ watch(
   align-items: center;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: 8px;
+  padding-bottom: 6px;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -540,8 +625,12 @@ watch(
 }
 
 .nodes-scroll-wrapper::-webkit-scrollbar-thumb {
-  background: #d0d7e1;
+  background: var(--border-color-light);
   border-radius: 3px;
+}
+
+.nodes-scroll-wrapper::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .nodes-grid {
@@ -559,50 +648,70 @@ watch(
 .parallel-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .node-card {
-  border: 2px solid #e2e9f5;
-  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   padding: 12px;
-  background: #fbfdff;
+  background: var(--bg-tertiary);
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: all var(--transition-base);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-width: 165px;
+  min-width: 170px;
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.node-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
 }
 
 .node-card:hover {
-  border-color: #2e7cf2;
-  box-shadow: 0 4px 12px rgba(45, 103, 216, 0.12);
-  transform: translateY(-1px);
+  border-color: var(--accent-primary);
+  background: var(--bg-elevated);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.node-card:hover::after {
+  opacity: 1;
+  box-shadow: inset 0 0 20px rgba(0, 212, 255, 0.05);
 }
 
 .node-card-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 6px;
+  gap: 8px;
 }
 
 .node-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  color: #24364f;
+  color: var(--text-primary);
   flex: 1;
   word-break: break-word;
+  line-height: 1.4;
 }
 
 .node-status-badge {
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
   white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 
 .node-card-body {
@@ -614,18 +723,26 @@ watch(
 .node-duration {
   font-size: 13px;
   font-weight: 500;
-  color: #536b8f;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.node-duration svg {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .node-hint {
-  font-size: 12px;
-  color: #8a9bb4;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .node-connector {
   width: 20px;
   height: 2px;
-  background: #d0d7e1;
+  background: linear-gradient(90deg, var(--border-color-light), transparent);
   flex-shrink: 0;
   position: relative;
 }
@@ -637,58 +754,54 @@ watch(
   top: -4px;
   width: 8px;
   height: 8px;
-  background: #d0d7e1;
+  background: var(--border-color-light);
   border-radius: 50%;
 }
 
 .node-status-success {
-  border-color: #2fb65c;
-  background: #f0f9f5;
+  border-color: rgba(16, 185, 129, 0.4);
 }
 
 .node-status-success .node-status-badge {
-  background: #d6f5e6;
-  color: #1d6e3f;
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-success);
 }
 
 .node-status-failed {
-  border-color: #e24b4b;
-  background: #fef5f5;
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
 .node-status-failed .node-status-badge {
-  background: #fce2e2;
-  color: #7a1f1f;
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--accent-danger);
 }
 
 .node-status-running {
-  border-color: #2e7cf2;
-  background: #eef5ff;
+  border-color: rgba(0, 212, 255, 0.4);
+  animation: pulse-border 2s ease-in-out infinite;
 }
 
 .node-status-running .node-status-badge {
-  background: #dce9fc;
-  color: #1d3f7a;
+  background: rgba(0, 212, 255, 0.15);
+  color: var(--accent-primary);
 }
 
 .node-status-pending {
-  border-color: #faad14;
-  background: #fffbeb;
+  border-color: rgba(245, 158, 11, 0.4);
 }
 
 .node-status-pending .node-status-badge {
-  background: #fff9e6;
-  color: #7a5a1f;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-warning);
 }
 
 .node-status-idle {
-  border-color: #dce4f2;
-  background: #f7faff;
+  border-color: var(--border-color);
 }
 
 .node-status-idle .node-status-badge {
-  background: #f0f2f5;
-  color: #595959;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
 }
 
 .logs-view {
@@ -697,10 +810,31 @@ watch(
   word-break: break-word;
   max-height: 60vh;
   overflow: auto;
-  background: #0f1722;
+  background: #0a0f1a;
   color: #d6e2ff;
-  padding: 12px;
-  border-radius: 8px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  border: 1px solid var(--border-color);
+}
+
+.page-empty {
+  padding: 48px 0;
+}
+
+.page-empty :deep(.ant-empty-description) {
+  color: var(--text-tertiary);
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(0, 212, 255, 0.1);
+  }
 }
 
 @media (max-width: 900px) {
@@ -709,7 +843,15 @@ watch(
   }
 
   .node-card {
-    min-width: 132px;
+    min-width: 140px;
+  }
+
+  .filter-picker {
+    width: 100%;
+  }
+
+  .filter-select {
+    width: 100%;
   }
 }
 </style>

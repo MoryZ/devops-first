@@ -4,12 +4,13 @@
     width="76vw"
     :closable="false"
     :destroyOnClose="false"
+    class="config-drawer"
     :bodyStyle="{ padding: '0', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }"
     @update:open="updateOpen"
   >
     <template #title>
       <div class="drawer-header">
-        <span class="drawer-title">{{ pipelineName || 'pipeline' }}</span>
+        <span class="drawer-title">{{ pipelineName || '流水线配置' }}</span>
         <div class="templates-row">
           <span class="templates-label">快速模板</span>
           <button class="tpl-btn" @click="applyTemplate('java')">Java</button>
@@ -17,8 +18,11 @@
           <button class="tpl-btn" @click="applyTemplate('static')">Static</button>
         </div>
         <div class="header-actions">
-          <a-button @click="$emit('close')">取消</a-button>
-          <a-button type="primary" :disabled="missingFields.length > 0" @click="handleSave">保存配置</a-button>
+          <a-button class="cancel-btn" @click="$emit('close')">取消</a-button>
+          <a-button type="primary" :disabled="missingFields.length > 0" class="save-btn" @click="handleSave">
+            <CheckOutlined />
+            保存配置
+          </a-button>
         </div>
       </div>
     </template>
@@ -29,10 +33,12 @@
       </div>
       <div class="health-bar-text" :class="healthClass">
         <template v-if="missingFields.length === 0">
-          <CheckCircleOutlined style="margin-right: 5px" />配置完整
+          <CheckCircleOutlined style="margin-right: 6px" />
+          配置完整
         </template>
         <template v-else>
-          <ExclamationCircleOutlined style="margin-right: 5px" />还需填写：{{ missingFields.join('、') }}
+          <ExclamationCircleOutlined style="margin-right: 6px" />
+          还需填写：{{ missingFields.join('、') }}
         </template>
       </div>
     </div>
@@ -136,7 +142,7 @@
             </template>
             <a-form layout="vertical" class="panel-form">
               <a-form-item label="构建方式">
-                <a-radio-group v-model:value="form.buildType" button-style="solid">
+                <a-radio-group v-model:value="form.buildType" button-style="solid" class="build-radio-group">
                   <a-radio-button value="maven">Maven</a-radio-button>
                   <a-radio-button value="gradle">Gradle</a-radio-button>
                   <a-radio-button value="npm">NPM</a-radio-button>
@@ -165,7 +171,7 @@
             </template>
             <a-form layout="vertical" class="panel-form">
               <a-form-item label="部署方式">
-                <a-radio-group v-model:value="form.deployType" button-style="solid">
+                <a-radio-group v-model:value="form.deployType" button-style="solid" class="deploy-radio-group">
                   <a-radio-button value="docker">Docker</a-radio-button>
                   <a-radio-button value="jar">JAR</a-radio-button>
                   <a-radio-button value="war">WAR</a-radio-button>
@@ -206,7 +212,7 @@
 <script setup>
 import { computed, ref, watch, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue'
+import { CheckCircleOutlined, CheckOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue'
 import { listGlobalVars } from '../api/globalVars'
 import { upsertPipelineConfig } from '../api/pipelines'
 
@@ -363,8 +369,7 @@ const loadGlobalVariables = async () => {
     loadingGlobalVariables.value = true
     const data = await listGlobalVars(props.token)
     globalVariables.value = data.data || data.items || []
-    
-    // Build fieldMap: namespace -> [field1, field2, ...]
+
     const fieldMap = {}
     globalVariables.value.forEach((gv) => {
       try {
@@ -435,42 +440,71 @@ const handleSave = async () => {
     message.error('网络错误: ' + err.message)
   }
 }
+
+onMounted(loadGlobalVariables)
 </script>
 
 <style scoped>
+:deep(.config-drawer) {
+  --header-bg: var(--bg-secondary);
+}
+
+:deep(.config-drawer .ant-drawer-header) {
+  background: var(--bg-secondary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 14px 20px !important;
+}
+
+:deep(.config-drawer .ant-drawer-body) {
+  background: var(--bg-primary) !important;
+}
+
 .drawer-header {
   display: flex;
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .drawer-title {
-  font-size: 18px;
+  font-family: var(--font-display);
+  font-size: 17px;
   font-weight: 700;
-  color: #1f2f46;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
 }
 
 .templates-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex: 1;
+  min-width: 0;
 }
 
 .templates-label {
   font-size: 12px;
-  color: #8c9bb5;
+  color: var(--text-tertiary);
+  white-space: nowrap;
 }
 
 .tpl-btn {
-  border: 1px solid #d0daea;
-  background: #f4f7fd;
-  color: #4a5d80;
-  border-radius: 6px;
-  padding: 2px 10px;
+  border: 1px solid var(--border-color-light);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 3px 12px;
   font-size: 12px;
   cursor: pointer;
+  font-family: var(--font-display);
+  transition: all var(--transition-fast);
+}
+
+.tpl-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--bg-elevated);
 }
 
 .header-actions {
@@ -479,64 +513,112 @@ const handleSave = async () => {
   margin-left: auto;
 }
 
+.cancel-btn {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color-light);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  height: 34px;
+  font-family: var(--font-display);
+  transition: all var(--transition-fast);
+}
+
+.cancel-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.save-btn {
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-info));
+  border: none;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(0, 212, 255, 0.25);
+  transition: all var(--transition-base);
+}
+
+.save-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 212, 255, 0.35);
+}
+
 .health-bar-wrap {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 20px;
-  background: #f7f9fc;
-  border-bottom: 1px solid #e8edf5;
+  gap: 14px;
+  padding: 10px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .health-bar-track {
   flex: 0 0 160px;
   height: 6px;
-  background: #e0e8f5;
+  background: var(--bg-elevated);
   border-radius: 6px;
   overflow: hidden;
 }
 
 .health-bar-fill {
   height: 100%;
+  transition: width 0.4s ease;
 }
 
-.health-bar-fill.health-good { background: #52c41a; }
-.health-bar-fill.health-warn { background: #faad14; }
-.health-bar-fill.health-bad { background: #ff4d4f; }
+.health-bar-fill.health-good { background: linear-gradient(90deg, var(--accent-success), rgba(16, 185, 129, 0.6)); }
+.health-bar-fill.health-warn { background: linear-gradient(90deg, var(--accent-warning), rgba(245, 158, 11, 0.6)); }
+.health-bar-fill.health-bad { background: linear-gradient(90deg, var(--accent-danger), rgba(239, 68, 68, 0.6)); }
 
-.health-bar-text { font-size: 13px; }
-.health-bar-text.health-good { color: #389e0d; }
-.health-bar-text.health-warn { color: #d48806; }
-.health-bar-text.health-bad { color: #cf1322; }
+.health-bar-text {
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+}
+
+.health-bar-text.health-good { color: var(--accent-success); }
+.health-bar-text.health-warn { color: var(--accent-warning); }
+.health-bar-text.health-bad { color: var(--accent-danger); }
 
 .drawer-body {
   display: grid;
   grid-template-columns: 1fr 320px;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .config-form {
   overflow-y: auto;
   padding: 16px 16px 16px 20px;
-  border-right: 1px solid #e8edf5;
+  border-right: 1px solid var(--border-color);
 }
 
 .config-collapse :deep(.ant-collapse-item) {
-  border: 1px solid #e0e8f5;
-  border-radius: 12px !important;
-  margin-bottom: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg) !important;
+  margin-bottom: 12px;
   overflow: hidden;
-  background: #fff;
+  background: var(--bg-card);
+  transition: all var(--transition-fast);
+}
+
+.config-collapse :deep(.ant-collapse-item:hover) {
+  border-color: var(--border-color-accent);
 }
 
 .config-collapse :deep(.ant-collapse-header) {
-  padding: 12px 16px !important;
-  background: #fafbff;
+  padding: 14px 16px !important;
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
 }
 
 .config-collapse :deep(.ant-collapse-content-box) {
-  padding: 16px 16px 8px !important;
+  padding: 16px !important;
+  background: var(--bg-card) !important;
 }
 
 .panel-header {
@@ -551,47 +633,54 @@ const handleSave = async () => {
   justify-content: center;
   width: 24px;
   height: 24px;
-  background: #1a5fd0;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
   color: #fff;
   border-radius: 50%;
   font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .panel-title {
   font-weight: 600;
-  font-size: 15px;
-  color: #1f2f46;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
 }
 
 .panel-hint {
   font-size: 12px;
-  color: #8c9bb5;
-  max-width: 280px;
+  color: var(--text-tertiary);
+  max-width: 300px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: var(--font-mono);
 }
 
 .panel-hint-missing {
-  color: #faad14;
+  color: var(--accent-warning);
 }
 
 .bpm-placeholder {
-  padding: 16px;
-  background: #f8fafc;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
 }
 
 .bpm-title {
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 700;
-  color: #1f2f46;
-  margin-bottom: 8px;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  letter-spacing: 0.02em;
 }
 
 .bpm-desc {
   font-size: 13px;
-  color: #6a7892;
-  line-height: 1.6;
+  color: var(--text-tertiary);
+  line-height: 1.7;
 }
 
 @media (max-width: 1100px) {
@@ -601,6 +690,11 @@ const handleSave = async () => {
 
   .config-form {
     border-right: none;
+  }
+
+  .bpm-placeholder {
+    border-left: none;
+    border-top: 1px solid var(--border-color);
   }
 }
 </style>
